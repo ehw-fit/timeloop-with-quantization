@@ -202,10 +202,11 @@ void LegacyNetwork::SetTileWidth(double width_um)
 }
 
 // Evaluate.
-EvalStatus LegacyNetwork::Evaluate(const tiling::CompoundTile& tile,
+EvalStatus LegacyNetwork::Evaluate(const problem::Workload* workload,
+                                 const tiling::CompoundTile& tile,
                                  const bool break_on_failure)
 {
-  auto eval_status = ComputeAccesses(tile.data_movement_info, break_on_failure);
+  auto eval_status = ComputeAccesses(workload, tile.data_movement_info, break_on_failure);
   if (!break_on_failure || eval_status.success)
   {
     ComputeNetworkEnergy();
@@ -215,7 +216,7 @@ EvalStatus LegacyNetwork::Evaluate(const tiling::CompoundTile& tile,
   return eval_status;
 }
 
-EvalStatus LegacyNetwork::ComputeAccesses(const tiling::CompoundDataMovementInfo& tile, const bool break_on_failure)
+EvalStatus LegacyNetwork::ComputeAccesses(const problem::Workload* workload, const tiling::CompoundDataMovementInfo& tile, const bool break_on_failure)
 {
   bool success = true;
   std::ostringstream fail_reason;
@@ -284,6 +285,15 @@ EvalStatus LegacyNetwork::ComputeAccesses(const tiling::CompoundDataMovementInfo
       stats_.ingresses[pv] = tile[pvi].access_stats;
     }
 
+    /* Quantization addition */
+    if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
+    {
+      for (auto& x: stats_.ingresses.at(pv).stats)
+      {
+        x.second.accesses = static_cast<double>(std::ceil(x.second.accesses) / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi)));
+      }
+    }
+
     stats_.spatial_reductions[pv] = 0;
     stats_.distributed_multicast[pv] = tile[pvi].distributed_multicast;
 
@@ -301,7 +311,11 @@ EvalStatus LegacyNetwork::ComputeAccesses(const tiling::CompoundDataMovementInfo
     // and for 2., we should count them as temporal reduction because the link
     // in this legacy/X-Y mesh network should not be able to reduce the partial
     // output.
-    stats_.link_transfers[pv] = tile[pvi].link_transfers;
+    /* Quantization addition */
+    if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
+      stats_.link_transfers[pv] = static_cast<unsigned long>(std::ceil(tile[pvi].link_transfers / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
+    else
+      stats_.link_transfers[pv] = tile[pvi].link_transfers;
 
     stats_.fanout[pv] = tile[pvi].fanout;
     if (stats_.distributed_multicast.at(pv))

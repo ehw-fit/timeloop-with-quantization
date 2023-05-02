@@ -88,9 +88,10 @@ class Level : public Module
                                         const sparse::PerStorageLevelCompressionInfo per_level_compression_info,
                                         const double confidence_threshold,
                                         const bool break_on_failure) = 0;
+  /* Quantization addition – added passing of the workload to reflect operand datawidth settings */                                        
   virtual EvalStatus Evaluate(const tiling::CompoundTile& tile, const tiling::CompoundMask& mask,
-                              const double confidence_threshold, const std::uint64_t compute_cycles,
-                              const bool break_on_failure) = 0;
+                              const problem::Workload* workload, const double confidence_threshold,
+                              const std::uint64_t compute_cycles, const bool break_on_failure) = 0;
   
   virtual double Energy(problem::Shape::DataSpaceID pv = problem::GetShape()->NumDataSpaces) const = 0;
   

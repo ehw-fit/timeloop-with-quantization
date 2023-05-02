@@ -65,12 +65,20 @@ class Workload
   typedef std::map<Shape::FlattenedDimensionID, Coordinate> FlattenedBounds;
   typedef std::map<Shape::CoefficientID, int> Coefficients;
   typedef std::map<Shape::DataSpaceID, std::shared_ptr<DensityDistribution>> Densities;
+  /* Quantization addition */
+  typedef std::map<Shape::DataSpaceID, unsigned> Bitwidths;
+  typedef std::map<Shape::DataSpaceID, bool> BitwidthsSpecified;
+  /*************************/
   
  protected:
   FactorizedBounds factorized_bounds_;
   FlattenedBounds flattened_bounds_;
   Coefficients coefficients_;
   Densities densities_;
+  /* Quantization addition */
+  Bitwidths bitwidths_;
+  BitwidthsSpecified bitwidths_specified_;
+  /*************************/
   bool workload_tensor_size_set_ = false;
   bool default_dense_ = true;
   Shape shape_;
@@ -126,6 +134,18 @@ class Workload
     return coefficients_.at(p);
   }
 
+  /* Quantization addition */
+  unsigned GetBitwidth(Shape::DataSpaceID p) const
+  {
+    return bitwidths_.at(p);
+  }
+
+  bool IsBitwidthSpecified(Shape::DataSpaceID p) const
+  {
+    return bitwidths_specified_.at(p);
+  }
+  /*************************/
+
   std::shared_ptr<DensityDistribution> GetDensity(Shape::DataSpaceID pv) const
   {
     return densities_.at(pv);
@@ -150,7 +170,7 @@ class Workload
   void SetFactorizedBounds(const FactorizedBounds& factorized_bounds)
   {
     factorized_bounds_ = factorized_bounds;
-    DeriveFlattenedBounds();
+    //DeriveFlattenedBounds();
   }
   
   // void SetFlattenedBounds(const FlattenedBounds& flattened_bounds)
@@ -162,7 +182,19 @@ class Workload
   {
     coefficients_ = coefficients;
   }
-  
+
+  /* Quantization addition */
+  void SetBitwidths(const Bitwidths& bitwidths)
+  {
+    bitwidths_ = bitwidths;
+  }
+
+  void SetBitwidthsSpecified(const BitwidthsSpecified& bitwidths_specified)
+  {
+    bitwidths_specified_ = bitwidths_specified;
+  }
+  /*************************/
+
   void SetDensities(const Densities& densities)
   {
     densities_ = densities;
@@ -204,6 +236,10 @@ class Workload
       ar& BOOST_SERIALIZATION_NVP(factorized_bounds_);
       ar& BOOST_SERIALIZATION_NVP(coefficients_);
       ar& BOOST_SERIALIZATION_NVP(densities_);
+      /* Quantization addition */
+      ar& BOOST_SERIALIZATION_NVP(bitwidths_);
+      ar& BOOST_SERIALIZATION_NVP(bitwidths_specified_);
+      /*************************/
     }
   }
 };

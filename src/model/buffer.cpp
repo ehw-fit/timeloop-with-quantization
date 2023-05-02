@@ -692,9 +692,8 @@ void BufferLevel::ValidateTopology(BufferLevel::Specs& specs)
   }
 }
 
-
 void BufferLevel::PopulateEnergyPerOp(unsigned num_ops){
-
+  
   if (! populate_energy_per_op){
 
     double ert_energy_per_op;
@@ -785,38 +784,72 @@ EvalStatus BufferLevel::PreEvaluationCheck(
         auto working_set_size = dense_working_set_size;
 
         std::string data_space_name = problem::GetShape()->DataSpaceIDToName.at(pvi);
-
+        
         (void) workload;
         (void) per_level_compression_info;
 
-         if (per_level_compression_info.find(pvi) != per_level_compression_info.end()
-             && per_level_compression_info.at(pvi).tensor_compressed)
-         {
-             working_set_size = workload->GetDensity(pvi)->GetMaxTileOccupancyByConfidence_LTW(dense_working_set_size, confidence_constraint);
-         }
-         else
-         {
-            working_set_size = ceil(dense_working_set_size * confidence_constraint);
-         }
-        required_capacity += working_set_size;
+        if (per_level_compression_info.find(pvi) != per_level_compression_info.end()
+            && per_level_compression_info.at(pvi).tensor_compressed)
+        {
+          working_set_size = workload->GetDensity(pvi)->GetMaxTileOccupancyByConfidence_LTW(dense_working_set_size, confidence_constraint);
+        }
+        else
+        {
+          working_set_size = ceil(dense_working_set_size * confidence_constraint);
+        }
+        
+        /* Quantization addition */
+        if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && workload->GetBitwidth(pvi) > 0)
+        {
+          // Check that the specified data operand bitwidth is not greater than the word bits
+          if (workload->GetBitwidth(pvi) > specs_.word_bits.Get())
+          {
+            success = false;
+            fail_reason << "data operand bitwidth of " << data_space_name << " is " << workload->GetBitwidth(pvi)
+                        << " which is greater than the HW word bits " << specs_.word_bits.Get();
+            break;
+          }
+          // Otherwise we need to compute how many words are needed to store the data (considering a bit packing technique)
+          else
+          {
+            // We store as many data operands as possible in a single word and avoid splitting them across words (which can inevitably waste space, but we want to avoid needing to access multiple words to get a single data operand)
+            // Other possibility would be to store the elements of the dataspaces in a descending order of the number of bits they require, so that we can pack as many as possible in a single word (first pack the largest accross words, then look if there is still remaining space for the next largest within the word, etc.)
+            required_capacity += static_cast<std::size_t>(std::ceil(working_set_size / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
+            
+            //if (specs_.word_bits.Get() % workload->GetBitwidth(pvi) != 0)
+            //{
+            //  uint64_t adjusted_word_bits = specs_.word_bits.Get();
+            //  while (adjusted_word_bits % workload->GetBitwidth(pvi) != 0)
+            //  {
+            //    adjusted_word_bits--;
+            //  }
+            //  std::cout << "Warning: " << specs_.name.Get() << ": reduce word bits to " << adjusted_word_bits
+            //  << " for data operand bitwidth of " << data_space_name << " to avoid storage fragmentation." << std::endl;
+            //}
+          }
+        }
+        else 
+        {
+          required_capacity += working_set_size;
+        }
+        /*************************/
       }
     }
 
-    if (required_capacity > available_capacity)
+    if (success && (required_capacity > available_capacity))
     {
       success = false;
       fail_reason << "mapped tile size " << required_capacity << " exceeds buffer capacity "
                   << available_capacity;
     }
-    else if (required_capacity < specs_.effective_size.Get()
-             * specs_.min_utilization.Get())
+    else if (success && (required_capacity < specs_.effective_size.Get()
+             * specs_.min_utilization.Get()))
     {
       success = false;
       fail_reason << "mapped tile size " << required_capacity << " is less than constrained "
                   << "minimum utilization " << specs_.effective_size.Get() * specs_.min_utilization.Get();
     }
   }
-
   EvalStatus eval_status;
   eval_status.success = success;
   eval_status.fail_reason = fail_reason.str();
@@ -829,15 +862,15 @@ EvalStatus BufferLevel::PreEvaluationCheck(
 // FIXME: Derive FanoutX, FanoutY, MeshX, MeshY from mapping if unspecified.
 //
 EvalStatus BufferLevel::Evaluate(const tiling::CompoundTile& tile, const tiling::CompoundMask& mask,
-                                 const double confidence_threshold, const std::uint64_t compute_cycles,
-                                 const bool break_on_failure)
+                                 const problem::Workload* workload, const double confidence_threshold,
+                                 const std::uint64_t compute_cycles, const bool break_on_failure)
 {
-  auto eval_status = ComputeScalarAccesses(tile.data_movement_info, mask, confidence_threshold, break_on_failure);
+  auto eval_status = ComputeScalarAccesses(workload, tile.data_movement_info, mask, confidence_threshold, break_on_failure);
   if (!break_on_failure || eval_status.success)
   {
-    ComputeVectorAccesses(tile.data_movement_info);
+    ComputeVectorAccesses(workload, tile.data_movement_info);
     ComputeBufferEnergy(tile.data_movement_info);
-    ComputeReductionEnergy();
+    ComputeReductionEnergy(workload);
     ComputeAddrGenEnergy();
     ComputePerformance(compute_cycles);
   }
@@ -877,7 +910,6 @@ void BufferLevel::ConnectDrain(std::shared_ptr<Network> network)
 
 std::uint64_t BufferLevel::ComputeMetaDataTileSizeInBits(const tiling::MetaDataTileOccupancy metadata_occupancy) const
 {
-
   double size = 0;
   for (unsigned r_id = 0; r_id < metadata_occupancy.size(); r_id++)
   {
@@ -900,9 +932,11 @@ std::uint64_t BufferLevel::ComputeMetaDataTileSize(const tiling::MetaDataTileOcc
   return ceil(size);
 }
 
-void BufferLevel::ComputeTileOccupancyAndConfidence(const tiling::CompoundDataMovementInfo& tile,
-                                                    const double confidence_threshold){
-
+void BufferLevel::ComputeTileOccupancyAndConfidence(const problem::Workload* workload,
+                                                    const tiling::CompoundDataMovementInfo& tile,
+                                                    const double confidence_threshold)
+{  
+  (void) workload;
   // collect tile sizes (data + metadata) for all dataspaces stored at the storage level
   // used for better distribution storage capacity to different dataspaces stored at this level
   double all_dataspace_data_tile_size = 0;
@@ -911,6 +945,7 @@ void BufferLevel::ComputeTileOccupancyAndConfidence(const tiling::CompoundDataMo
   problem::PerDataSpace<double> expected_data_tile_sizes;
   // problem::PerDataSpace<double> expected_metadata_tile_sizes;
   problem::PerDataSpace<double> expected_metadata_tile_sizes_bits;
+
   for (unsigned pvi = 0; pvi < unsigned(problem::GetShape()->NumDataSpaces); pvi++)
   {
 
@@ -924,13 +959,21 @@ void BufferLevel::ComputeTileOccupancyAndConfidence(const tiling::CompoundDataMo
 
     if (tile[pvi].compressed)
     {
-      expected_data_tile_sizes[pvi] = tile[pvi].expected_data_occupancy;
+      /* Quantization addition – we need to reflect the operand bitwidth on the buffer's expected utilized memory capacity */
+      if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && workload->GetBitwidth(pvi) > 0)
+        expected_data_tile_sizes[pvi] = static_cast<double>(std::ceil(tile[pvi].expected_data_occupancy / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
+      else
+        expected_data_tile_sizes[pvi] = tile[pvi].expected_data_occupancy;
       // expected_metadata_tile_sizes[pvi] = ComputeMetaDataTileSize(tile[pvi].expected_metadata_occupancy);
       expected_metadata_tile_sizes_bits[pvi] = ComputeMetaDataTileSizeInBits(tile[pvi].expected_metadata_occupancy);
     } 
     else
     {
-      expected_data_tile_sizes[pvi] = tile[pvi].shape;
+      /* Quantization addition – we need to reflect the operand bitwidth on the buffer's expected utilized memory capacity */
+      if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && workload->GetBitwidth(pvi) > 0)
+        expected_data_tile_sizes[pvi] = static_cast<double>(std::ceil(tile[pvi].shape / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
+      else
+        expected_data_tile_sizes[pvi] = tile[pvi].shape;
 
       if (tile[pvi].has_metadata)
       {
@@ -1036,7 +1079,6 @@ void BufferLevel::ComputeTileOccupancyAndConfidence(const tiling::CompoundDataMo
           }
           tile_confidence = confidence_lower_bound;
         }
-
       }
       else
       {
@@ -1055,9 +1097,9 @@ void BufferLevel::ComputeTileOccupancyAndConfidence(const tiling::CompoundDataMo
     }
 
     stats_.compressed[pv] = tile[pvi].compressed;
-    stats_.tile_shape[pv] = tile[pvi].shape;
     stats_.tile_confidence[pv] = tile_confidence;
-    stats_.data_tile_size[pv] = data_tile_size;
+    stats_.data_tile_size[pv] = data_tile_size; //this accounts to the number of elements/operands in the tile for describing the mapping loop nest
+    stats_.tile_shape[pv] = tile[pvi].shape;
     // stats_.metadata_tile_size[pv] = (specs_.default_md_word_bits.Get() != 0) ?
     //                                  metadata_tile_size : 0;
     for (unsigned rid = 0; rid < metadata_tile_occupancy.size(); rid++)
@@ -1066,18 +1108,23 @@ void BufferLevel::ComputeTileOccupancyAndConfidence(const tiling::CompoundDataMo
       std::uint64_t payload_units = ceil(metadata_tile_occupancy[rid].PayloadUnits());
       stats_.metadata_tile_size[pvi].push_back({ metadata_units, payload_units });
     }
-    
-    
+
     stats_.metadata_tile_size_bits[pv] = metadata_tile_size_bits;
     stats_.tile_density_distribution[pv] = tile[pvi].GetDensityType();
     stats_.metadata_format[pv] = tile[pvi].GetMetaDataFormatName();
-    stats_.utilized_capacity[pv] = data_tile_size;
+    /* Quantization addition – we need to reflect the operand bitwidth on the buffer's utilized memory capacity */
+    if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && workload->GetBitwidth(pvi) > 0)
+      stats_.utilized_capacity[pv] = static_cast<double>(std::ceil(data_tile_size / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
+    else
+      stats_.utilized_capacity[pv] = data_tile_size;
+    
     // stats_.utilized_md_capacity[pv] = metadata_tile_size;
     stats_.utilized_md_capacity_bits[pv] = metadata_tile_size_bits;
   }
 }
 
-EvalStatus BufferLevel::ComputeScalarAccesses(const tiling::CompoundDataMovementInfo& tile,
+EvalStatus BufferLevel::ComputeScalarAccesses(const problem::Workload* workload,
+                                              const tiling::CompoundDataMovementInfo& tile,
                                               const tiling::CompoundMask& mask,
                                               const double confidence_threshold,
                                               const bool break_on_failure)
@@ -1098,10 +1145,13 @@ EvalStatus BufferLevel::ComputeScalarAccesses(const tiling::CompoundDataMovement
   for (unsigned pvi = 0; pvi < unsigned(problem::GetShape()->NumDataSpaces); pvi++)
   {
     auto pv = problem::Shape::DataSpaceID(pvi);
+    if (workload->IsBitwidthSpecified(pvi)) assert(workload->GetBitwidth(pvi) <= (specs_.word_bits.Get()) && (workload->GetBitwidth(pvi) > 0));
 
     stats_.keep[pv] = mask[pv];
 
+    // Partition size is the total number of unique elements in each tensor that flow through that unit over the course of execution 
     stats_.partition_size[pv] = tile[pvi].partition_size;
+    // Tile size means how many elements of the original dataspace is to be tiled/stored in the memory element (the actual element occupation is influenced by sparsity)
     stats_.tile_size[pv] = tile[pvi].size;
     // stats_.utilized_instances[pv] = tile[pvi].replication_factor;
     
@@ -1150,38 +1200,57 @@ EvalStatus BufferLevel::ComputeScalarAccesses(const tiling::CompoundDataMovement
     // vector access computation is more involved, will be performed in ComputeVectorAccesses if mapping valid
     for(auto iter = tile[pvi].fine_grained_data_accesses.begin(); iter != tile[pvi].fine_grained_data_accesses.end(); ++iter)
     {
-      stats_.fine_grained_scalar_accesses[pvi][iter->first] = iter->second;
+      /* Quantization addition */
+      if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
+        stats_.fine_grained_scalar_accesses[pvi][iter->first] = static_cast<std::uint64_t>(std::ceil(iter->second / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
+      else
+        stats_.fine_grained_scalar_accesses[pvi][iter->first] = iter->second;
     }
 
-    
     for(auto iter = tile[pvi].fine_grained_format_accesses.begin(); iter != tile[pvi].fine_grained_format_accesses.end(); ++iter)
     {
+      // The fine-grained format scalar accesses are related to metadata accesses, which are not affected by quantization,
+      // but rather by bitwidth specification within the sparse acceleration features (SAF) – sparse features file
       stats_.fine_grained_format_scalar_accesses[pvi][iter->first] = iter->second;
     }
    
-    // original high-level actions
-    stats_.reads[pv] = tile[pvi].reads;
-    stats_.updates[pv] = tile[pvi].updates;
-    stats_.fills[pv] = tile[pvi].fills;
-    stats_.temporal_reductions[pv] = tile[pvi].temporal_reductions;
+    /* Quantization addition */
+    if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
+    {
+      stats_.reads[pv] = static_cast<std::uint64_t>(std::ceil(tile[pvi].reads / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
+      stats_.updates[pv] = static_cast<std::uint64_t>(std::ceil(tile[pvi].updates / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
+      stats_.fills[pv] = static_cast<std::uint64_t>(std::ceil(tile[pvi].fills / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
+      stats_.temporal_reductions[pv] = static_cast<std::uint64_t>(std::ceil(tile[pvi].temporal_reductions / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
+    }
+    else
+    {
+      // original high-level actions
+      stats_.reads[pv] = tile[pvi].reads;
+      stats_.updates[pv] = tile[pvi].updates;
+      stats_.fills[pv] = tile[pvi].fills;
+      stats_.temporal_reductions[pv] = tile[pvi].temporal_reductions;
+    }
 
     // address generations take gated accesses into account but not skipped accesses
     //    for gated accesses, an address to gate is necessary, so one address generation is counted for each gate
     //    for skipped access, only an address to skip to is necessary, and this address corresponds to an actual access address generation
     //      thus zero address generation is necessary
     if (problem::GetShape()->IsReadWriteDataSpace.at(pv))
+    {
       //stats_.address_generations[pv] = stats_.updates[pv] + stats_.fills[pv]; // FIXME? we want address generation be accounted for in energy/compound action?
       stats_.address_generations[pv] = stats_.fine_grained_scalar_accesses[pv]["random_update"]
         + stats_.fine_grained_scalar_accesses[pv]["gated_update"]
         + stats_.fine_grained_scalar_accesses[pv]["random_fill"]
         + stats_.fine_grained_scalar_accesses[pv]["gated_fill"];
+    }
     else
+    {
       //stats_.address_generations[pv] = stats_.reads[pv] + stats_.fills[pv]; // FIXME? we want address generation be accounted for in energy/compound action?
       stats_.address_generations[pv] = stats_.fine_grained_scalar_accesses[pv]["random_read"]
         + stats_.fine_grained_scalar_accesses[pv]["gated_read"]
         + stats_.fine_grained_scalar_accesses[pv]["random_fill"]
         + stats_.fine_grained_scalar_accesses[pv]["gated_fill"];
-
+    }
     //stats_.metadata_reads[pv] = tile[pvi].metadata_reads;
     //stats_.metadata_fills[pv] = tile[pvi].metadata_fills;
     //stats_.metadata_updates[pv] = tile[pvi].metadata_updates;
@@ -1212,10 +1281,21 @@ EvalStatus BufferLevel::ComputeScalarAccesses(const tiling::CompoundDataMovement
     stats_.gated_format_reads[pv] = stats_.fine_grained_format_scalar_accesses[pv]["gated_metadata_read"];
     stats_.gated_format_fills[pv] = stats_.fine_grained_format_scalar_accesses[pv]["gated_metadata_fill"];
     stats_.gated_format_updates[pv] = stats_.fine_grained_format_scalar_accesses[pv]["gated_metadata_update"];
+
+    if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
+    {
+      stats_.operands_per_word[pv] = static_cast<std::uint64_t>(std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi)));
+      stats_.wasted_bits[pv] = specs_.word_bits.Get() % workload->GetBitwidth(pvi);  
+    }
+    else
+    {
+      stats_.operands_per_word[pv] = 1;
+      stats_.wasted_bits[pv] = 0;
+    }
   }
 
   // compute the tile occupancy and (if applicable) confidence (considers compression and metadata overhead)
-  ComputeTileOccupancyAndConfidence(tile, confidence_threshold);
+  ComputeTileOccupancyAndConfidence(workload, tile, confidence_threshold);
 
   //
   // 2. Derive/validate architecture specs based on stats.
@@ -1353,8 +1433,7 @@ EvalStatus BufferLevel::ComputeScalarAccesses(const tiling::CompoundDataMovement
   return eval_status;
 }
 
-
-void BufferLevel::ComputeVectorAccesses(const tiling::CompoundDataMovementInfo& tile){
+void BufferLevel::ComputeVectorAccesses(const problem::Workload* workload, const tiling::CompoundDataMovementInfo& tile){
 
   // calculate fine-grained vector accesses
   auto block_size = specs_.block_size.Get();
@@ -1367,7 +1446,8 @@ void BufferLevel::ComputeVectorAccesses(const tiling::CompoundDataMovementInfo& 
     // flag to signify choice of vector access calculations
     bool data_storage_naive = true;
 
-    uint64_t tile_shape = tile[pvi].shape;
+    uint64_t tile_shape;
+    tile_shape = tile[pvi].shape;
 
     // determine whether naive model is enough
     // naive calculation of vector accesses is applicable if
@@ -1417,21 +1497,29 @@ void BufferLevel::ComputeVectorAccesses(const tiling::CompoundDataMovementInfo& 
     // metadata accesses are scaled similarly as they are also dependent on the number of nonzero values in the tile
     for (auto iter = tile[pvi].fine_grained_data_accesses.begin(); iter != tile[pvi].fine_grained_data_accesses.end(); ++iter)
     {
-       if (iter->first.find("count") == std::string::npos && iter->second != 0 && tile_shape != 0) {
+      /* Quantization addition */
+      unsigned long accesses;
+      if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
+        accesses = static_cast<unsigned long>(std::ceil(iter->second / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
+      else
+        accesses = iter->second;
 
-          bool metadata_action = (iter->first.find("metadata") != std::string::npos) ? true : false;
+      if (iter->first.find("count") == std::string::npos && accesses != 0 && tile_shape != 0) {
 
-           double total_naive_accesses;
-           if (!metadata_action) {
-            total_naive_accesses = (iter->second % block_size == 0) ? iter->second / block_size : iter->second / block_size + 1;
-            stats_.fine_grained_vector_accesses[pvi][iter->first] = total_naive_accesses * ratio;
-           } 
-       } else {
-          // decompression counts are not related to block size
-          stats_.fine_grained_vector_accesses[pvi][iter->first] = iter->second;
-       }
+        bool metadata_action = (iter->first.find("metadata") != std::string::npos) ? true : false;
+
+        double total_naive_accesses;
+        if (!metadata_action) {
+          total_naive_accesses = (accesses % block_size == 0) ? accesses / block_size : accesses / block_size + 1;
+              stats_.fine_grained_vector_accesses[pvi][iter->first] = total_naive_accesses * ratio;
+        } 
+      } else {
+        // decompression counts are not related to block size
+        stats_.fine_grained_vector_accesses[pvi][iter->first] = accesses;
+      }
     }
 
+    // The metadata accesses need not be changed to reflect the dataspace bitwidth, because they are handled separately by the metadata bitwidth specification
     for (auto iter = tile[pvi].fine_grained_format_accesses.begin(); iter != tile[pvi].fine_grained_format_accesses.end(); iter++)
     {
       std::uint64_t accessed_bits_accumulator = 0;
@@ -1548,7 +1636,7 @@ void BufferLevel::FinalizeBufferEnergy() {
 //
 // Compute reduction energy.
 //
-void BufferLevel::ComputeReductionEnergy()
+void BufferLevel::ComputeReductionEnergy(const problem::Workload* workload)
 {
   // Temporal reduction: add a value coming in on the network to a value stored locally.
   for (unsigned pvi = 0; pvi < unsigned(problem::GetShape()->NumDataSpaces); pvi++)
@@ -1556,8 +1644,12 @@ void BufferLevel::ComputeReductionEnergy()
     auto pv = problem::Shape::DataSpaceID(pvi);
     if (problem::GetShape()->IsReadWriteDataSpace.at(pv))
     {
-      stats_.temporal_reduction_energy[pv] = stats_.temporal_reductions[pv] * 
-        pat::AdderEnergy(specs_.word_bits.Get(), network_update_->WordBits());
+      if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))  
+        stats_.temporal_reduction_energy[pv] = stats_.temporal_reductions[pv] * 
+          pat::AdderEnergy(workload->GetBitwidth(pvi), workload->GetBitwidth(pvi));
+      else
+        stats_.temporal_reduction_energy[pv] = stats_.temporal_reductions[pv] * 
+          pat::AdderEnergy(specs_.word_bits.Get(), network_update_->WordBits());
     }
     else
     {
@@ -1582,7 +1674,7 @@ void BufferLevel::ComputeAddrGenEnergy()
     auto pv = problem::Shape::DataSpaceID(pvi);
     if (specs_.addr_gen_energy.Get() < 0.0) { 
       stats_.addr_gen_energy[pv] = stats_.address_generations[pv] *
-        pat::AdderEnergy(specs_.addr_gen_bits.Get(), specs_.addr_gen_bits.Get());
+        pat::AdderEnergy(specs_.addr_gen_bits.Get(), specs_.addr_gen_bits.Get());      
     }
     else
     {
@@ -1920,6 +2012,11 @@ void BufferLevel::Print(std::ostream& out) const
         out << indent + indent << "Tile density distribution                                   : " << stats.tile_density_distribution.at(pv) << std::endl;
         out << indent + indent << "Data tile shape                                             : " << stats.tile_shape.at(pv) << std::endl;
         out << indent + indent << "Max utilized data storage capacity                          : " << stats.utilized_capacity.at(pv) << std::endl;
+        /* Quantization addition */
+        out << indent + indent << "Data operands per word                                      : " << stats.operands_per_word.at(pv) << std::endl;
+        out << indent + indent << "Wasted bits per word                                        : " << stats.wasted_bits.at(pv) << std::endl;
+        out << indent + indent << "Wasted bits per data storage due to fragmentation           : " << stats.wasted_bits.at(pv) * stats.utilized_capacity.at(pv) << std::endl;
+        /*************************/
         out << indent + indent << "Representation format                                       : " << stats.metadata_format.at(pv) << std::endl;
         out << indent + indent << "Max utilized Repr format storage capacity                   "  ;
         if (stats.metadata_format.at(pv) == "none") out << ": 0" << std::endl;

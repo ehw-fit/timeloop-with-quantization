@@ -220,14 +220,14 @@ class ArithmeticUnits : public Level
     (void) pv;
     return 0;
   }
- 
   EvalStatus Evaluate(const tiling::CompoundTile& tile, const tiling::CompoundMask& mask,
-                      const double confidence_threshold, const std::uint64_t compute_cycles,
-                      const bool break_on_failure) override
+                      const problem::Workload* workload, const double confidence_threshold,
+                      const std::uint64_t compute_cycles, const bool break_on_failure) override
   {
     assert(is_specced_);
 
     (void) mask;
+    (void) workload;
     (void) confidence_threshold;
     (void) break_on_failure;
     (void) compute_cycles;

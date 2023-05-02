@@ -235,7 +235,8 @@ double SimpleMulticastNetwork::GetMulticastEnergyByDataType(std::uint64_t multic
     return opEnergy;
 }
 
-EvalStatus SimpleMulticastNetwork::Evaluate(const tiling::CompoundTile& tile,
+EvalStatus SimpleMulticastNetwork::Evaluate(const problem::Workload* workload,
+                              const tiling::CompoundTile& tile,
                               const bool break_on_failure)
 {
   (void) tile;
@@ -257,6 +258,15 @@ EvalStatus SimpleMulticastNetwork::Evaluate(const tiling::CompoundTile& tile,
     // only need to count the number of transfers
     stats_.ingresses[pv] = data_movement[pv].access_stats;
     stats_.multicast_factor[pv] = 0;
+
+    /* Quantization addition */
+    if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
+    {
+      for (auto& x: stats_.ingresses.at(pv).stats)
+      {
+        x.second.accesses = static_cast<double>(std::ceil(x.second.accesses) / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi)));
+      }
+    }
 
     for (auto& x: stats_.ingresses.at(pv).stats)
     {

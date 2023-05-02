@@ -58,6 +58,7 @@ void handler(int s)
 
 int main(int argc, char* argv[])
 {
+  printf("test\n");
   assert(argc >= 2);
 
   struct sigaction action;

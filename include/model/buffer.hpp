@@ -203,6 +203,11 @@ class BufferLevel : public Level
   struct Stats
   {
     problem::PerDataSpace<bool> keep;
+    /* Quantization addition */
+    problem::PerDataSpace<std::uint64_t> data_bitwidth;
+    problem::PerDataSpace<std::uint64_t> operands_per_word;
+    problem::PerDataSpace<std::uint64_t> wasted_bits;
+    /*************************/
     problem::PerDataSpace<std::uint64_t> partition_size;
     problem::PerDataSpace<std::uint64_t> utilized_capacity;
     problem::PerDataSpace<std::uint64_t> utilized_md_capacity_bits;
@@ -303,6 +308,11 @@ class BufferLevel : public Level
       if (version == 0)
       {
         ar& BOOST_SERIALIZATION_NVP(keep);
+        /* Quantization addition */
+        ar& BOOST_SERIALIZATION_NVP(data_bitwidth);
+        ar& BOOST_SERIALIZATION_NVP(operands_per_word);
+        ar& BOOST_SERIALIZATION_NVP(wasted_bits);
+        /*************************/
         ar& BOOST_SERIALIZATION_NVP(partition_size);
         ar& BOOST_SERIALIZATION_NVP(utilized_capacity);
         ar& BOOST_SERIALIZATION_NVP(utilized_instances);
@@ -395,17 +405,21 @@ class BufferLevel : public Level
   //
 
  private:
-  EvalStatus ComputeScalarAccesses(const tiling::CompoundDataMovementInfo& tile, const tiling::CompoundMask& mask,
-                                   const double confidence_threshold,
+ /* Quantization addition – added passing of the workload to reflect operand datawidth settings */
+  EvalStatus ComputeScalarAccesses(const problem::Workload* workload, const tiling::CompoundDataMovementInfo& tile,
+                                   const tiling::CompoundMask& mask, const double confidence_threshold,
                                    const bool break_on_failure);
-  void ComputeVectorAccesses(const tiling::CompoundDataMovementInfo& tile);
-  void ComputeTileOccupancyAndConfidence(const tiling::CompoundDataMovementInfo& tile, const double confidence_threshold);
+  /* Quantization addition – added passing of the workload to reflect operand datawidth settings */
+  void ComputeVectorAccesses(const problem::Workload* workload, const tiling::CompoundDataMovementInfo& tile);
+  /* Quantization addition – added passing of the workload to reflect operand datawidth settings */
+  void ComputeTileOccupancyAndConfidence(const problem::Workload* workload, const tiling::CompoundDataMovementInfo& tile, const double confidence_threshold);
   std::uint64_t ComputeMetaDataTileSizeInBits (const tiling::MetaDataTileOccupancy metadata_occupancy) const;
   std::uint64_t ComputeMetaDataTileSize(const tiling::MetaDataTileOccupancy metadata_occupancy) const;
   void ComputePerformance(const std::uint64_t compute_cycles);
   // void ComputeBufferEnergy();
   void ComputeBufferEnergy(const tiling::CompoundDataMovementInfo& data_movement_info);
-  void ComputeReductionEnergy();
+  /* Quantization addition – added passing of the workload to reflect operand datawidth settings */
+  void ComputeReductionEnergy(const problem::Workload* workload);
   void ComputeAddrGenEnergy();
 
   double StorageEnergy(problem::Shape::DataSpaceID pv = problem::GetShape()->NumDataSpaces) const;
@@ -456,9 +470,10 @@ class BufferLevel : public Level
                                 const sparse::PerStorageLevelCompressionInfo per_level_compression_info,
                                 const double confidence_threshold,
                                 const bool break_on_failure) override;
+  /* Quantization addition – added passing of the workload to reflect operand datawidth settings */
   EvalStatus Evaluate(const tiling::CompoundTile& tile, const tiling::CompoundMask& mask,
-                      const double confidence_threshold, const std::uint64_t compute_cycles,
-                      const bool break_on_failure) override;
+                      const problem::Workload* workload, const double confidence_threshold,
+                      const std::uint64_t compute_cycles, const bool break_on_failure) override;
 
   // Energy calculation functions that are externally accessed in topology.cpp
   void ComputeEnergyDueToChildLevelOverflow(Stats child_level_stats, unsigned data_space_id);
