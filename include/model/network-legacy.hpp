@@ -205,10 +205,11 @@ class LegacyNetwork : public Network
   // Floorplanner interface.
   void SetTileWidth(double width_um) override;
 
-  EvalStatus Evaluate(const tiling::CompoundTile& tile,
+  EvalStatus Evaluate(const problem::Workload* workload,
+                      const tiling::CompoundTile& tile,
                       const bool break_on_failure) override;
 
-  EvalStatus ComputeAccesses(const tiling::CompoundDataMovementInfo& tile, const bool break_on_failure);
+  EvalStatus ComputeAccesses(const problem::Workload* workload, const tiling::CompoundDataMovementInfo& tile, const bool break_on_failure);
   void ComputeNetworkEnergy();
   void ComputeSpatialReductionEnergy();
   void ComputePerformance();

@@ -32,6 +32,7 @@
 #include "model/util.hpp"
 #include "model/level.hpp"
 #include "pat/pat.hpp"
+#include "workload/workload.hpp"
 
 namespace model
 {
@@ -100,7 +101,8 @@ class Network : public Module
   // Floorplanner interface.
   virtual void SetTileWidth(double width_um) = 0;
 
-  virtual EvalStatus Evaluate(const tiling::CompoundTile& tile,
+  virtual EvalStatus Evaluate(const problem::Workload* workload,
+                              const tiling::CompoundTile& tile,
                               const bool break_on_failure) = 0;
 
   virtual void Print(std::ostream& out) const = 0;

@@ -179,7 +179,8 @@ void ReductionTreeNetwork::SetTileWidth(double width_um)
   }
 }
 
-EvalStatus ReductionTreeNetwork::Evaluate(const tiling::CompoundTile& tile,
+EvalStatus ReductionTreeNetwork::Evaluate(const problem::Workload* workload,
+                              const tiling::CompoundTile& tile,
                               const bool break_on_failure)
 {
   tiling::CompoundDataMovementInfo data_movement = tile.data_movement_info;
@@ -207,7 +208,16 @@ EvalStatus ReductionTreeNetwork::Evaluate(const tiling::CompoundTile& tile,
     {
       stats_.ingresses[pv].clear();
     }
-  } 
+    /* Quantization addition */
+    if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
+    {
+      for (auto& x: stats_.ingresses.at(pv).stats)
+      {
+        x.second.accesses = static_cast<double>(std::ceil(x.second.accesses) / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi)));
+      }
+    }
+  }
+
 
   // Calculate energy
   for (unsigned pvi = 0; pvi < unsigned(problem::GetShape()->NumDataSpaces); pvi++)

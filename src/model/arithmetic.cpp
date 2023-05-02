@@ -103,7 +103,6 @@ ArithmeticUnits::Specs ArithmeticUnits::ParseSpecs(config::CompoundConfigNode se
       assert(false);
     }
     instances = (unsigned long long) nElements;
-    //std::cout << "ArithUnit: " << specs.name << " size: " << instances << std::endl;
   }
 
   specs.instances = (std::uint64_t) instances;
@@ -114,6 +113,30 @@ ArithmeticUnits::Specs ArithmeticUnits::ParseSpecs(config::CompoundConfigNode se
       setting.lookupValue("datawidth", word_bits) )
   {
     specs.word_bits = word_bits;
+    //setting.exists("word-bits") ? setting.lookupValue("word-bits", word_bits_a) : setting.lookupValue("datawidth", word_bits_a);
+
+    // NOTE: Currently there is no support for different bitwidths for different operands – the parts in accelergy's code need to be modified to acknowledge this!
+    // Then small changes would be made to the code in arithmetic.cpp and arithmetic.hpp
+    /*
+    if ((setting.exists("word-bits") && setting.lookup("word-bits").isMap()) || (setting.exists("datawidth") && setting.lookup("datawidth").isMap()))
+    {
+      auto arith_datawidth = setting.exists("word-bits") ? setting.lookup("word-bits") : setting.lookup("datawidth");
+      word_bits_a = Specs::kDefaultWordBits;
+      word_bits_b = Specs::kDefaultWordBits;
+      if (!arith_datawidth.lookupValue("a", word_bits_a) && !arith_datawidth.lookupValue("A", word_bits_a) && !arith_datawidth.lookupValue("operand-a", word_bits_a) && !arith_datawidth.lookupValue("operand-A", word_bits_a)) { ; }
+
+      if (!arith_datawidth.lookupValue("b", word_bits_b) && !arith_datawidth.lookupValue("B", word_bits_b) && !arith_datawidth.lookupValue("operand-b", word_bits_b) && !arith_datawidth.lookupValue("operand-B", word_bits_b)) { ; }
+
+      specs.word_bits_a = word_bits_a;
+      specs.word_bits_b = word_bits_b;
+    }
+    else
+    {
+      setting.exists("word-bits") ? setting.lookupValue("word-bits", word_bits_a) : setting.lookupValue("datawidth", word_bits_a);
+      specs.word_bits_a = word_bits_a;
+      specs.word_bits_b = word_bits_a;
+    } 
+    */   
   }
   else
   {

@@ -186,7 +186,8 @@ class ReductionTreeNetwork : public Network
   // Floorplanner interface.
   void SetTileWidth(double width_um) override;
  
-  EvalStatus Evaluate(const tiling::CompoundTile& tile,
+  EvalStatus Evaluate(const problem::Workload* workload,
+                      const tiling::CompoundTile& tile,
                       const bool break_on_failure) override;
   // PAT interface.
   static double WireEnergyPerHop(std::uint64_t word_bits, const double hop_distance, double wire_energy_override);

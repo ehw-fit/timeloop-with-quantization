@@ -483,12 +483,10 @@ out << std::endl
     out << "GFLOPs (@1GHz): " << float(total_ops)  / topology.stats_.cycles << std::endl;
     out << "Utilization: " << topology.stats_.utilization << std::endl;
     out << "Cycles: " << topology.stats_.cycles << std::endl;
-    out << "Energy: " << topology.stats_.energy / 1000000 << " uJ" << std::endl;
+    out << "Energy: " << std::scientific << topology.stats_.energy / 1000000.0 << " uJ" << OUT_FLOAT_FORMAT << std::endl;
     out << "EDP(J*cycle): " << std::scientific << float(topology.stats_.cycles) * topology.stats_.energy / 1e12 << OUT_FLOAT_FORMAT << std::endl;
-
   }
-  out << "Area: " << topology.stats_.area / 1000000 << " mm^2" << std::endl;
-
+  out << "Area: " << std::scientific << topology.stats_.area / 1000000.0 << " mm^2" << OUT_FLOAT_FORMAT << std::endl;
 
   if (topology.is_evaluated_)
   {
@@ -1294,8 +1292,8 @@ std::vector<EvalStatus> Topology::Evaluate(Mapping& mapping,
   if (!break_on_failure || success_accum)
   {
     auto level_id = specs_.ArithmeticMap();
-    auto s = GetArithmeticLevel()->Evaluate(tiles[0], keep_masks[0], 0,
-                                            compute_cycles, break_on_failure);
+    auto s = GetArithmeticLevel()->Evaluate(tiles[0], keep_masks[0], analysis->GetWorkload(),
+                                            0, compute_cycles, break_on_failure);
     eval_status.at(level_id) = s;
     success_accum &= s.success;
 
@@ -1330,6 +1328,7 @@ std::vector<EvalStatus> Topology::Evaluate(Mapping& mapping,
     }
 
     auto s = storage_level->Evaluate(tiles[storage_level_id], keep_masks[storage_level_id],
+                                     analysis->GetWorkload(),
                                      mapping.confidence_thresholds.at(storage_level_id),
                                      compute_cycles, break_on_failure);
     eval_status.at(level_id) = s;
@@ -1375,7 +1374,7 @@ std::vector<EvalStatus> Topology::Evaluate(Mapping& mapping,
     EvalStatus s;
     if (!rf_net->IsEvaluated())
     {
-      s = rf_net->Evaluate(tiles[connection_id], break_on_failure);
+      s = rf_net->Evaluate(analysis->GetWorkload(), tiles[connection_id], break_on_failure);
       eval_status.at(connection_id).success &= s.success;
       eval_status.at(connection_id).fail_reason += s.fail_reason;
       success_accum &= s.success;
@@ -1387,7 +1386,7 @@ std::vector<EvalStatus> Topology::Evaluate(Mapping& mapping,
     auto du_net = connection.drain_update_network;
     if (!du_net->IsEvaluated())
     {
-      s = du_net->Evaluate(tiles[connection_id], break_on_failure);
+      s = du_net->Evaluate(analysis->GetWorkload(), tiles[connection_id], break_on_failure);
       eval_status.at(connection_id).success &= s.success;
       eval_status.at(connection_id).fail_reason += s.fail_reason;
       success_accum &= s.success;
@@ -1454,7 +1453,7 @@ void Topology::ComputeStats(bool eval_success)
 
     // Computes.
     stats_.algorithmic_computes = GetArithmeticLevel()->AlgorithmicComputes();
-    stats_.actual_computes = GetArithmeticLevel() -> ActualComputes();
+    stats_.actual_computes = GetArithmeticLevel()->ActualComputes();
 
     // Last-level accesses.
     stats_.last_level_accesses = GetStorageLevel(NumStorageLevels()-1)->Accesses();
@@ -1473,6 +1472,15 @@ void Topology::ComputeStats(bool eval_success)
       stats_.per_tensor_accesses.push_back(pta);
       stats_.accesses.push_back(GetStorageLevel(i)->Accesses());
     }
+
+    // Area.
+    double area = 0;
+    for (auto level : levels_)
+    {
+      assert(level->Area() >= 0);
+      area += level->Area();
+    }
+    stats_.area = area;
 
   } // eval_success
 

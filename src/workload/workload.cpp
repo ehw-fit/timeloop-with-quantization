@@ -265,6 +265,81 @@ void ParseWorkloadInstance(config::CompoundConfigNode config, Workload& workload
     }
   }
   workload.SetDensities(densities);
+
+  /* Quantization addition */
+  Workload::Bitwidths bitwidths;
+  Workload::BitwidthsSpecified bitwidths_specified;
+
+  // 1) Shared bitwidth specification for all dataspaces (specified using "commonBitwidth" or "commonDatawidth")
+  unsigned common_bitwidth;
+  bool common_bw_set = false;
+  if (config.exists("commonBitwidth") || config.exists("commonDatawidth") || config.exists("commonWordwidth"))
+  {
+    std::string bitwidth_key = config.exists("commonBitwidth") ? "commonBitwidth" : (config.exists("commonDatawidth") ? "commonDatawidth" : "commonWordwidth");
+    if (! config.lookup(bitwidth_key).isMap())
+    {
+      config.lookupValue(bitwidth_key, common_bitwidth);
+      common_bw_set = true;
+    }
+    else
+    {
+      common_bitwidth = 0;
+    }
+    // Assign the same bitwidth value to all dataspaces
+    for (unsigned i = 0; i < GetShape()->NumDataSpaces; i++)
+    {
+      bitwidths[i] = common_bitwidth;
+      bitwidths_specified[i] = common_bw_set == true ? true : false;
+    }
+  }
+
+  // 2) bitwidth specifications for each dataspace
+  else if (config.exists("bitwidths") || config.exists("datawidths") || config.exists("wordwidths"))
+  {
+    std::string bitwidth_key = config.exists("bitwidths") ? "bitwidths" : (config.exists("datawidths") ? "datawidths" : "wordwidths");
+    auto config_bitwidths = config.lookup(bitwidth_key);
+    for (unsigned i = 0; i < GetShape()->NumDataSpaces; i++)
+    {
+      std::string dataspace_name = GetShape()->DataSpaceIDToName.at(i);
+
+      // The dataspace_name exists within the bitwidths specification 
+      if (config_bitwidths.exists(dataspace_name))
+      {
+        // Set the explicit bitwidth specification
+		    config_bitwidths.lookupValue(dataspace_name, bitwidths[i]);
+        bitwidths_specified[i] = true;
+      }
+      else
+      {
+        // No bitwidth specified, roll back to default
+        bitwidths[i] = 0;
+        bitwidths_specified[i] = false;
+      }
+    }
+  }
+
+  // 3) No bitwidth specification -> assume same bitwidth for all dataspaces
+  //    (the data bitwidth will be determined by HW memory specification)
+  else
+  {
+    for (unsigned i = 0; i < GetShape()->NumDataSpaces; i++)
+    {
+      bitwidths[i] = 0;
+      bitwidths_specified[i] = false;
+    }
+  }
+
+  // Test print if bitwidths are set correctly
+  /*
+  for (unsigned i = 0; i < GetShape()->NumDataSpaces; i++)
+  {
+    std::cout << "DataSpace: "<< i << " named: "<< GetShape()->DataSpaceIDToName.at(i) << " Bitwidth: " << bitwidths[i] << " Explicitly set: " << bitwidths_specified[i] << std::endl;
+  }
+  */
+  
+  workload.SetBitwidths(bitwidths);
+  workload.SetBitwidthsSpecified(bitwidths_specified);
+  /*************************/
 }
 
 } // namespace problem

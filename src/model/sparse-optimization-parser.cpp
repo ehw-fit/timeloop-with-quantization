@@ -181,7 +181,7 @@ void InitializeCompressionInfo(SparseOptimizationInfo &sparse_optimization_info,
 
 void InitializeActionOptimizationInfo(SparseOptimizationInfo &sparse_optimization_info)
 {
-  sparse_optimization_info.action_skipping_info = {};
+  sparse_optimization_info.action_gating_info = {}; // fix – original code initiliazed twice the action_skipping_info
   sparse_optimization_info.action_spatial_skipping_info = {};
   sparse_optimization_info.action_skipping_info = {};
   sparse_optimization_info.compute_optimization_info = {};

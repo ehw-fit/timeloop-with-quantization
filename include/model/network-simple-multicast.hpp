@@ -189,7 +189,8 @@ class SimpleMulticastNetwork : public Network
   double GetMulticastEnergy(std::uint64_t multicast_factor);
   double GetMulticastEnergyByDataType(std::uint64_t multicast_factor, std::string data_space_name);
  
-  EvalStatus Evaluate(const tiling::CompoundTile& tile,
+  EvalStatus Evaluate(const problem::Workload* workload,
+                      const tiling::CompoundTile& tile,
                       const bool break_on_failure) override;
 
   void Print(std::ostream& out) const override;
