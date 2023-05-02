@@ -1,4 +1,4 @@
-# Timeloop
+# Timeloop (with quantization)
 
 ## About
 
@@ -6,6 +6,10 @@ Timeloop is an infrastructure that aims to provide modeling, mapping and code-ge
 
 * A fast analytical model that can emulate a range of EDDO architecture designs and provide performance and energy projections
 * A mapper that that searches for an optimal mapping in the space of mappings of a tensor-algebra problem on a given architecture
+
+## Fork additions
+
+Additions to account for specifying different workload tensors bitwidths during the mapping evaluation.
 
 ## Documentation
 
