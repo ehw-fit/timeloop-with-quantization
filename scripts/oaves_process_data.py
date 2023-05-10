@@ -14,13 +14,13 @@ def construct_argparser():
     parser.add_argument('-i',
                         '--stats_file',
                         type=str,
-                        default='',
+                        required=True,
                         help='Input OAVES Stats File',
                         )
     parser.add_argument('-o',
                         '--output_file',
                         type=str,
-                        default='',
+                        required=True,
                         help='Output File',
                         )
     parser.add_argument('-a',
@@ -28,7 +28,6 @@ def construct_argparser():
                         action='store_true',
                         help='keep all different buffer sizes',
                         )
-
     return parser
 
 
@@ -43,10 +42,11 @@ def process_data(stats_file: str, output_file: str, keep_all_entry: bool = True)
     """
 
     df = pd.read_csv(stats_file, header=None)
+
     generated_mapping_files = set(df.iloc[:,-1])
 
     # Columns are defined as follows:
-    # 0 - buffer size, 1 - op intensity, 2 - dram word accesses, 3,4,5 - buffer size for each tensor, 6,7,8 - dram word accesses for each tensor, 9 - compact print of mapping, 10 - path to mapping.yaml
+    # 0 - pJ/compute, 1 - utilization, 2 - cycles, 3 - energy [uJ], 4 - EDP [J*cycle], 5 - area [mm^2], 6 - computes, 7 - algorithmic computes, 8 - buffer size, 9 - op intensity, 10 - dram word accesses, 11,12,13 - buffer size for each tensor, 14,15,16 - dram word accesses for each tensor, 17 - compact print of mapping, 18 - path to mapping.yaml
 
     idx = df.groupby(0)[1].idxmax()
     df = df.loc[idx]
@@ -86,5 +86,6 @@ def process_data(stats_file: str, output_file: str, keep_all_entry: bool = True)
 if __name__ == "__main__":
     parser = construct_argparser()
     args = parser.parse_args()
+    print(args.stats_file)
 
     process_data(args.stats_file, args.output_file, args.keep_all_entry)

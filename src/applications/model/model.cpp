@@ -192,6 +192,7 @@ Application::Stats Application::Run()
 {
   // Output file names.
   std::string stats_file_name = out_prefix_ + ".stats.txt";
+  std::string csv_stats_file_name = out_prefix_ + ".stats.csv";
   std::string xml_file_name = out_prefix_ + ".map+stats.xml";
   std::string map_txt_file_name = out_prefix_ + ".map.txt";
 
@@ -262,6 +263,22 @@ Application::Stats Application::Run()
     std::ofstream map_txt_file(map_txt_file_name);
     mapping.PrettyPrint(map_txt_file, arch_specs_.topology.StorageLevelNames(), engine.GetTopology().UtilizedCapacities(), engine.GetTopology().TileSizes());
     map_txt_file.close();
+
+    //CSV STATS FILE
+    std::ofstream stats_csv_file(csv_stats_file_name);
+    stats_csv_file << "pJ/Compute,Utilization,Cycles,Energy [uJ],EDP [J*cycle],Area [mm^2],LastLevelAccesses,MAC energy [pJ],Computes,Algorithmic computes" << std::endl;
+    stats_csv_file << engine.Energy() / engine.GetTopology().ActualComputes() << ","; // pJ/Compute
+    stats_csv_file << engine.Utilization() << ","; //Utilization
+    stats_csv_file << engine.Cycles() << ","; //Cycles
+    stats_csv_file << engine.Energy() / 1000000 << ","; //Energy
+    stats_csv_file << std::scientific << float(engine.Cycles()) * engine.Energy() / 1e12 << std::fixed << ","; //EDP
+    stats_csv_file << engine.Area()/1000000 << ","; //Area
+    stats_csv_file << engine.GetTopology().LastLevelAccesses() << ","; //LastLevelAccesses
+    stats_csv_file << engine.GetTopology().GetSpecs().GetArithmeticLevel()->energy_per_op << ","; //Energy of MAC unit (random MAC operation)
+    stats_csv_file << engine.GetTopology().ActualComputes() << ","; //Computes
+    stats_csv_file << engine.GetTopology().AlgorithmicComputes(); //Algorithmic computes
+    stats_csv_file << std::endl;
+    stats_csv_file.close();
 
     std::ofstream stats_file(stats_file_name);
     stats_file << engine << std::endl;
