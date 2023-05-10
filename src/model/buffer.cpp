@@ -2178,29 +2178,34 @@ void BufferLevel::Print(std::ostream& out) const
       }
       else
       {
-        out << indent + indent << "Partition size                           : " << stats.partition_size.at(pv) << std::endl;
-        out << indent + indent << "Utilized capacity                        : " << stats.utilized_capacity.at(pv) << std::endl;
-        out << indent + indent << "Utilized instances (max)                 : " << int(stats.utilized_instances.at(pv)) << std::endl;
-        out << indent + indent << "Utilized clusters (max)                  : " << stats.utilized_clusters.at(pv) << std::endl;
-        out << indent + indent << "Scalar reads (per-instance)              : " << stats.reads.at(pv) << std::endl;
-        out << indent + indent << "Scalar updates (per-instance)            : " << stats.updates.at(pv) << std::endl;
-        out << indent + indent << "Scalar fills (per-instance)              : " << stats.fills.at(pv) << std::endl;
-        out << indent + indent << "Temporal reductions (per-instance)       : " << stats.temporal_reductions.at(pv) << std::endl;
-        out << indent + indent << "Address generations (per-cluster)        : " << stats.address_generations.at(pv) << std::endl;
+        out << indent + indent << "Partition size                                        : " << stats.partition_size.at(pv) << std::endl;
+        out << indent + indent << "Utilized capacity                                     : " << stats.utilized_capacity.at(pv) << std::endl;
+        /* Quantization addition */
+        out << indent + indent << "Data operands per word                                : " << stats.operands_per_word.at(pv) << std::endl;
+        out << indent + indent << "Wasted bits per word                                  : " << stats.wasted_bits.at(pv) << std::endl;
+        out << indent + indent << "Wasted bits per data storage due to fragmentation     : " << stats.wasted_bits.at(pv) * stats.utilized_capacity.at(pv) << std::endl;
+        /*************************/
+        out << indent + indent << "Utilized instances (max)                              : " << int(stats.utilized_instances.at(pv)) << std::endl;
+        out << indent + indent << "Utilized clusters (max)                               : " << stats.utilized_clusters.at(pv) << std::endl;
+        out << indent + indent << "Scalar reads (per-instance)                           : " << stats.reads.at(pv) << std::endl;
+        out << indent + indent << "Scalar updates (per-instance)                         : " << stats.updates.at(pv) << std::endl;
+        out << indent + indent << "Scalar fills (per-instance)                           : " << stats.fills.at(pv) << std::endl;
+        out << indent + indent << "Temporal reductions (per-instance)                    : " << stats.temporal_reductions.at(pv) << std::endl;
+        out << indent + indent << "Address generations (per-cluster)                     : " << stats.address_generations.at(pv) << std::endl;
 
-        out << indent + indent << "Energy (per-scalar-access)               : " << stats.energy_per_access.at(pv) << " pJ" << std::endl;
-        out << indent + indent << "Energy (per-instance)                    : " << stats.energy.at(pv) << " pJ" << std::endl;
-        out << indent + indent << "Energy (total)                           : " << stats.energy.at(pv) * stats.utilized_instances.at(pv) << " pJ" << std::endl;
-        out << indent + indent << "Temporal Reduction Energy (per-instance) : " << stats.temporal_reduction_energy.at(pv) << " pJ" << std::endl;
-        out << indent + indent << "Temporal Reduction Energy (total)        : " << stats.temporal_reduction_energy.at(pv) * stats.utilized_instances.at(pv) << " pJ" << std::endl;
-        out << indent + indent << "Address Generation Energy (per-cluster)  : " << stats.addr_gen_energy.at(pv) << " pJ" << std::endl;
-        out << indent + indent << "Address Generation Energy (total)        : " << stats.addr_gen_energy.at(pv) * stats.utilized_clusters.at(pv) << " pJ" << std::endl;
-        out << indent + indent << "Shared Bandwidth (per-instance)          : " << stats.shared_bandwidth.at(pv) << " words/cycle" << std::endl;
-        out << indent + indent << "Shared Bandwidth (total)                 : " << stats.shared_bandwidth.at(pv) * stats.utilized_instances.at(pv) << " words/cycle" << std::endl;
-        out << indent + indent << "Read Bandwidth (per-instance)            : " << stats.read_bandwidth.at(pv) << " words/cycle" << std::endl;
-        out << indent + indent << "Read Bandwidth (total)                   : " << stats.read_bandwidth.at(pv) * stats.utilized_instances.at(pv) << " words/cycle" << std::endl;
-        out << indent + indent << "Write Bandwidth (per-instance)           : " << stats.write_bandwidth.at(pv) << " words/cycle" << std::endl;
-        out << indent + indent << "Write Bandwidth (total)                  : " << stats.write_bandwidth.at(pv) * stats.utilized_instances.at(pv) << " words/cycle" << std::endl;
+        out << indent + indent << "Energy (per-scalar-access)                            : " << stats.energy_per_access.at(pv) << " pJ" << std::endl;
+        out << indent + indent << "Energy (per-instance)                                 : " << stats.energy.at(pv) << " pJ" << std::endl;
+        out << indent + indent << "Energy (total)                                        : " << stats.energy.at(pv) * stats.utilized_instances.at(pv) << " pJ" << std::endl;
+        out << indent + indent << "Temporal Reduction Energy (per-instance)              : " << stats.temporal_reduction_energy.at(pv) << " pJ" << std::endl;
+        out << indent + indent << "Temporal Reduction Energy (total)                     : " << stats.temporal_reduction_energy.at(pv) * stats.utilized_instances.at(pv) << " pJ" << std::endl;
+        out << indent + indent << "Address Generation Energy (per-cluster)               : " << stats.addr_gen_energy.at(pv) << " pJ" << std::endl;
+        out << indent + indent << "Address Generation Energy (total)                     : " << stats.addr_gen_energy.at(pv) * stats.utilized_clusters.at(pv) << " pJ" << std::endl;
+        out << indent + indent << "Shared Bandwidth (per-instance)                       : " << stats.shared_bandwidth.at(pv) << " words/cycle" << std::endl;
+        out << indent + indent << "Shared Bandwidth (total)                              : " << stats.shared_bandwidth.at(pv) * stats.utilized_instances.at(pv) << " words/cycle" << std::endl;
+        out << indent + indent << "Read Bandwidth (per-instance)                         : " << stats.read_bandwidth.at(pv) << " words/cycle" << std::endl;
+        out << indent + indent << "Read Bandwidth (total)                                : " << stats.read_bandwidth.at(pv) * stats.utilized_instances.at(pv) << " words/cycle" << std::endl;
+        out << indent + indent << "Write Bandwidth (per-instance)                        : " << stats.write_bandwidth.at(pv) << " words/cycle" << std::endl;
+        out << indent + indent << "Write Bandwidth (total)                               : " << stats.write_bandwidth.at(pv) * stats.utilized_instances.at(pv) << " words/cycle" << std::endl;
       }
     }
   }

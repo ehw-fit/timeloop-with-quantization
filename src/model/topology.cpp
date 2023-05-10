@@ -561,6 +561,17 @@ out << std::endl
 
 void  Topology::PrintOAVES(std::ostream& out, Mapping& mapping, bool log_oaves_mappings, std::string oaves_prefix, unsigned thread_id) const {
 
+  // Report mapping's engine topology stats
+  //pJ/Compute,Utilization,Cycles,Energy [uJ],EDP [J*cycle],Area [mm^2],Computes,Algorithmic computes
+  out << stats_.energy / stats_.actual_computes << ",";  // pJ/Compute
+  out << stats_.utilization << ",";  //Utilization
+  out << stats_.cycles << ",";  //Cycles
+  out << stats_.energy / 1000000 << ",";  //Energy [uJ]
+  out << std::scientific << float(stats_.cycles) * stats_.energy / 1e12 << std::fixed << ","; //EDP [J*cycle]
+  out << stats_.area/1000000 << ","; //Area [mm^2]
+  out << stats_.actual_computes << ","; //Computes
+  out << stats_.algorithmic_computes << ","; //Algorithmic computes
+
   if (NumStorageLevels() > 0)
   {
     // Get the buffer utilization of the innermost memory level
@@ -601,18 +612,27 @@ void  Topology::PrintOAVES(std::ostream& out, Mapping& mapping, bool log_oaves_m
     // Assume the DRAM is the last level
     auto last_storage_level_id = NumStorageLevels() - 1;
     double op_per_byte = GetStorageLevel(last_storage_level_id)->OperationalIntensity(total_ops);
+    
+    // Other stats
+    //innermost memory level util,Op intensity(last memory level/DRAM),LastLevelAccesses
 
     out << total_utilization << "," << op_per_byte << "," << GetStorageLevel(last_storage_level_id)->Accesses();
     for (unsigned pvi = 0; pvi < problem::GetShape()->NumDataSpaces; pvi++)
     {
+      // Other stats
+      //per-dataspace first memory level (closest to PEs) bytes util
       auto pv = problem::Shape::DataSpaceID(pvi);
       out << "," << GetStorageLevel(first_storage_level_id)->TotalUtilizedBytes(pv);
     }
     for (unsigned pvi = 0; pvi < problem::GetShape()->NumDataSpaces; pvi++)
     {
+      // Other stats
+      //per-dataspace last memory level (DRAM) accesses
       auto pv = problem::Shape::DataSpaceID(pvi);
       out << "," << GetStorageLevel(last_storage_level_id)->Accesses(pv);
     }
+    // Other stats
+    //current mapping, mapping file name if stored separately (or none)
     out << "," << mapping.PrintCompact();
     if (log_oaves_mappings) {
       std::stringstream oaves_mapping_ss;
