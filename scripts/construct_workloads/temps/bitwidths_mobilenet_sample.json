@@ -1,0 +1,142 @@
+{
+    "conv1": {
+        "Inputs": 8,
+        "Weights": 4,
+        "Outputs": 8
+    },
+    "conv2": {
+        "Inputs": 7,
+        "Weights": 5,
+        "Outputs": 8
+    },
+    "conv3": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv4": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv5": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv6": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv7": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv8": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv9": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv10": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv11": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv12": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv13": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv14": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv15": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv16": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv17": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv18": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv19": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv20": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv21": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv22": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv23": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv24": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv25": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv26": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv27": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    },
+    "conv28": {
+        "Inputs": 8,
+        "Weights": 2,
+        "Outputs": 8
+    }
+}

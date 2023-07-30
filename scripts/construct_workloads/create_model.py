@@ -7,7 +7,58 @@ import torch
 import torchvision.models as models
 import tensorflow as tf
 import tensorflow.keras.applications as keras_models
-from keras.models import load_model
+
+
+def get_model(model_name, input_shape):
+    keras_model_name = ''
+    if(model_name == 'xception'):
+        keras_model_name = 'Xception'
+
+    elif(model_name == 'vgg16'):
+        keras_model_name = 'VGG16'
+    elif(model_name == 'vgg19'):
+        keras_model_name = 'VGG19'
+
+    elif(model_name == 'resnet50'):
+        keras_model_name = 'ResNet50'
+    elif(model_name == 'resnet101'):
+        keras_model_name = 'ResNet101'
+    elif(model_name == 'resnet152'):
+        keras_model_name = 'ResNet152'
+    elif(model_name == 'resnet50_v2'):
+        keras_model_name = 'ResNet50V2'
+    elif(model_name == 'resnet101_v2'):
+        keras_model_name = 'ResNet101V2'
+    elif(model_name == 'resnet152_v2'):
+        keras_model_name = 'ResNet152V2'
+
+    elif(model_name == 'inception_v3'):
+        keras_model_name = 'InceptionV3'
+    elif(model_name == 'inception_resnet_v2'):
+        keras_model_name = 'InceptionResNetV2'
+
+    elif(model_name == 'mobilenet'):
+        keras_model_name = 'MobileNet'
+    elif(model_name == 'mobilenet_v2'):
+        keras_model_name = 'MobileNetV2'
+
+    elif(model_name == 'densenet121'):
+        keras_model_name = 'DenseNet121'
+    elif(model_name == 'densenet169'):
+        keras_model_name = 'DenseNet169'
+    elif(model_name == 'densenet201'):
+        keras_model_name = 'DenseNet201'
+
+    elif(model_name == 'nasnet_large'):
+        keras_model_name = 'NASNetLarge'
+    elif(model_name == 'nasnet_mobile'):
+        keras_model_name = 'NASNetMobile'
+
+    else:
+        raise NotImplementedError('Not supported model')
+    keras_model = getattr(keras_models, keras_model_name)(weights=None, include_top=True, input_shape=input_shape)
+    print('Get the keras model: ' + keras_model_name)
+    return keras_model
 
 
 # Retrieve the layer output shape for models
@@ -94,16 +145,16 @@ def get_conv_layers_keras(model, input_size, batch_size):
     return layers
 
 
-# Create Timeloop layer description from parsed pytorch model
-def parse_pytorch_model(input_size, model_file, batch_size, out_dir, out_file, api_name, verbose=False):
-    input_size = tuple((int(d) for d in str.split(input_size, ",")))
+# Create Timeloop layer description from created pytorch model
+def create_pytorch_model(input_size, model_name, batch_size, out_dir, out_file, api_name, verbose=False):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    # Assuming that the model contains both the architecture and the weights
-    model = torch.load(model_file)
+    model = getattr(models, model_name)()
+    model = model.to(device)
+
     cnn_layers = get_conv_layers_pytorch(model, input_size, batch_size)
 
     if verbose:
-        print("# Model: " + str(model_file.split(".")[0]))
+        print("# Model: " + str(model_name))
         print("# W, H, C, N, M, S, R, Wpad, Hpad, Wstride, Hstride")
         print("cnn_layers = [")
         for layer in cnn_layers:
@@ -112,7 +163,7 @@ def parse_pytorch_model(input_size, model_file, batch_size, out_dir, out_file, a
 
     with open(os.path.join(out_dir, out_file + ".yaml"), "w") as f:
         f.write(f"api: {api_name}\n")
-        f.write(f"model: " + str(model_file.split('.')[0]) + "\n")
+        f.write(f"model: {model_name}\n")
         f.write("# W, H, C, N, M, S, R, Wpad, Hpad, Wstride, Hstride\n")
         f.write("layers:\n")
         for layer in cnn_layers:
@@ -121,14 +172,14 @@ def parse_pytorch_model(input_size, model_file, batch_size, out_dir, out_file, a
             f.write("]\n")
 
 
-# Create Timeloop layer description from parsed keras model
-def parse_keras_model(input_size, model_file, batch_size, out_dir, out_file, api_name, verbose=False):
-    input_size = tuple((int(d) for d in str.split(input_size, ",")))
-    model = load_model(model_file)
+# Create Timeloop layer description from created keras model
+def create_keras_model(input_size, model_name, batch_size, out_dir, out_file, api_name, verbose=False):
+    model = get_model(model_name, input_size)
+
     cnn_layers = get_conv_layers_keras(model, input_size, batch_size)
 
     if verbose:
-        print("# Model: " + str(model_file.split(".")[0]))
+        print("# Model: " + str(model_name))
         print("# W, H, C, N, M, S, R, Wpad, Hpad, Wstride, Hstride")
         print("cnn_layers = [")
         for layer in cnn_layers:
@@ -137,7 +188,7 @@ def parse_keras_model(input_size, model_file, batch_size, out_dir, out_file, api
 
     with open(os.path.join(out_dir, out_file + ".yaml"), "w") as f:
         f.write(f"api: {api_name}\n")
-        f.write(f"model: " + str(model_file.split('.')[0]) + "\n")
+        f.write(f"model: {model_name}\n")
         f.write("# W, H, C, N, M, S, R, Wpad, Hpad, Wstride, Hstride\n")
         f.write("layers:\n")
         for layer in cnn_layers:
@@ -147,22 +198,34 @@ def parse_keras_model(input_size, model_file, batch_size, out_dir, out_file, api
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter, prog="parse_model", description="Parser of keras/pytorch models into Timeloop layer description format")
+    parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter, prog="create_model", description="Creator of keras/pytorch models into Timeloop layer description format")
     parser.add_argument('-a', '--api_name', type=str, default="keras", help="api choices: pytorch, keras")
     parser.add_argument('-i', '--input_size', type=str, default="224,224,3", help='input size in format W,H,C')
     parser.add_argument('-v', '--verbose', default=False, action='store_true')
-    parser.add_argument('-m', '--model_file', type=str, required=True, help='relative path to model file')
+    parser.add_argument('-m', '--model', type=str, default="mobilenet_v2", help='model from torchvision choices: \n'
+                                                            'resnet18, alexnet, vgg16, squeezenet, densenet, \n'
+                                                            'inception_v3, googlenet, shufflenet, \n'
+                                                            'mobilenet_v2, wide_resnet50_2, mnasnet,\n'
+                                                            '-----\n'
+                                                            'model from tensorflow.keras.applications choices: \n'
+                                                            'xception, vgg16, vgg19, resnet50, resnet101, \n'
+                                                            'resnet152, resnet50_v2, resnet101_v2, resnet152_v2, \n'
+                                                            'inception_v3, inception_resnet_v2, mobilenet, mobilenet_v2,\n'
+                                                            'densenet121, densenet169, densenet201, nasnet_large, \n'
+                                                            'nasnet_mobile\n'
+                                                            '-----\n')
     parser.add_argument('-b', '--batch_size', type=int, default=1, help='batch size')
-    parser.add_argument('-o', '--outfile', type=str, default=f"parsed_model_layers", help='output file name')
+    parser.add_argument('-o', '--outfile', type=str, default=f"created_model_layers", help='output file name')
 
     # Parse arguments
     opt = parser.parse_args()
+    input_size = tuple((int(d) for d in str.split(opt.input_size, ",")))
 
     if opt.verbose:
         print('Begin processing')
         print('API name: ' + str(opt.api_name))
         print('Model name: ' + str(opt.model))
-        print('Input size: ' + str(opt.input_size))
+        print('Input size: ' + str(input_size))
 
     out_dir = "parsed_models"
     if not os.path.exists(out_dir):
@@ -170,6 +233,8 @@ if __name__ == "__main__":
 
     # Process model based on chosen API and return layer dimensions
     if opt.api_name == 'pytorch':
-        parse_pytorch_model(opt.input_size, opt.model_file, opt.batch_size, out_dir, opt.outfile, opt.api_name, opt.verbose)
+        create_pytorch_model(input_size, opt.model, opt.batch_size, out_dir, opt.outfile, opt.api_name, opt.verbose)
     elif opt.api_name == 'keras':
-        parse_keras_model(opt.input_size, opt.model_file, opt.batch_size, out_dir, opt.outfile, opt.api_name, opt.verbose)
+        create_keras_model(input_size, opt.model, opt.batch_size, out_dir, opt.outfile, opt.api_name, opt.verbose)
+    else:
+        raise ValueError("Unknown API name: " + str(opt.api_name))
