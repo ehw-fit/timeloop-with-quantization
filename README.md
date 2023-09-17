@@ -14,7 +14,7 @@ Additions to account for specifying different workload tensors bitwidths during 
 To use account for the use of different bitwidths, you need to specify it inside the workload's YAML specification.
 
 Simply specify the following under the instance key according to your desire (NOTE: the bitwidth must be able to fit in HW's word size):
-```
+```yaml
 bitwidths:
       Inputs: X
       Outputs: X
@@ -22,7 +22,7 @@ bitwidths:
 ```
 
 For example:
-```
+```yaml
 problem:
   instance:
     C: 3
