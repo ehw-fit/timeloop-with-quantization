@@ -11,7 +11,7 @@ Timeloop is an infrastructure that aims to provide modeling, mapping and code-ge
 
 Additions to account for specifying different workload tensors bitwidths during the mapping evaluation using bit-packing technique to reduce memory footprint.
 
-To use account for the use of different bitwidths, you need to specify it inside the workload's YAML specification.
+To account for the use of different bitwidths, you need to specify it inside the workload's YAML specification.
 
 Simply specify the following under the instance key according to your desire (NOTE: the bitwidth must be able to fit in HW's word size):
 ```yaml
