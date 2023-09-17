@@ -9,7 +9,41 @@ Timeloop is an infrastructure that aims to provide modeling, mapping and code-ge
 
 ## Fork additions
 
-Additions to account for specifying different workload tensors bitwidths during the mapping evaluation.
+Additions to account for specifying different workload tensors bitwidths during the mapping evaluation using bit-packing technique to reduce memory footprint.
+
+To use account for the use of different bitwidths, you need to specify it inside the workload's YAML specification.
+
+Simply specify the following under the instance key according to your desire (NOTE: the bitwidth must be able to fit in HW's word size):
+```
+bitwidths:
+      Inputs: X
+      Outputs: X
+      Weights: X
+```
+
+For example:
+```
+problem:
+  instance:
+    C: 3
+    Hdilation: 1
+    Hstride: 2
+    M: 32
+    N: 1
+    P: 112
+    Q: 112
+    R: 3
+    S: 3
+    Wdilation: 1
+    Wstride: 2
+    bitwidths:
+      Inputs: 8
+      Outputs: 8
+      Weights: 2
+  shape:
+    ...
+```
+
 
 ## Documentation
 
