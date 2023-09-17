@@ -14,8 +14,8 @@ Additions to account for specifying different workload tensors bitwidths during 
 ## Documentation
 
 Timeloop documentation is hosted at https://timeloop.csail.mit.edu/timeloop. The guides there cover installation, usage and examples.
-For a deeper understanding of Timeloop's internals please read our [ISPASS 2019 paper](https://parashar.org/ispass19.pdf).
+For a deeper understanding of Timeloop's internals please read the original [ISPASS 2019 paper](https://parashar.org/ispass19.pdf).
 
 ## Tutorial
 
-New users are strongly encouraged to complete the Timeloop [tutorial](https://accelergy.mit.edu/tutorial.html). Serially walking through the [exercises](https://github.com/Accelergy-Project/timeloop-accelergy-exercises/) from the tutorial serves as an essential hands-on introduction to the tool.
+New users are strongly encouraged to complete the original Timeloop [tutorial](https://accelergy.mit.edu/tutorial.html). Serially walking through the [exercises](https://github.com/Accelergy-Project/timeloop-accelergy-exercises/) from the tutorial serves as an essential hands-on introduction to the tool.
