@@ -150,7 +150,7 @@ BufferLevel::Specs BufferLevel::ParseSpecs(config::CompoundConfigNode level, std
 
   // Word Bits.
   std::uint32_t word_bits;
-  if (buffer.lookupValue("word-bits", word_bits) ||
+  if (buffer.lookupValue("word_bits", word_bits) ||
       buffer.lookupValue("word_width", word_bits) ||
       buffer.lookupValue("datawidth", word_bits) )
   {
@@ -165,7 +165,7 @@ BufferLevel::Specs BufferLevel::ParseSpecs(config::CompoundConfigNode level, std
   std::uint32_t block_size;
   bool block_size_specified = false;
   specs.block_size = 1;
-  if (buffer.lookupValue("block-size", block_size) ||
+  if (buffer.lookupValue("block_size", block_size) ||
       buffer.lookupValue("block_size", block_size) ||
       buffer.lookupValue("n_words", block_size) )
   {
@@ -265,7 +265,7 @@ BufferLevel::Specs BufferLevel::ParseSpecs(config::CompoundConfigNode level, std
   specs.cluster_size = 1;
   std::uint32_t width;
   bool cluster_size_specified = false;
-  if (buffer.lookupValue("cluster-size", cluster_size))
+  if (buffer.lookupValue("cluster_size", cluster_size))
   {
     specs.cluster_size = cluster_size;
     cluster_size_specified = true;
@@ -305,7 +305,7 @@ BufferLevel::Specs BufferLevel::ParseSpecs(config::CompoundConfigNode level, std
       specs.block_size = width / word_bits;
       specs.cluster_size = 1;
       std::cout << "Warning: neither block size nor cluster size specified, set according to specified storage width: block size: " 
-        << specs.block_size << "  cluster-size: " << specs.cluster_size << std::endl;
+        << specs.block_size << "  cluster_size: " << specs.cluster_size << std::endl;
     }
   }
 
@@ -361,7 +361,7 @@ BufferLevel::Specs BufferLevel::ParseSpecs(config::CompoundConfigNode level, std
   // SRAM Type.
   std::uint32_t num_ports = 2;
   specs.num_ports = num_ports;
-  if (buffer.lookupValue("num-ports", num_ports) ||
+  if (buffer.lookupValue("num_ports", num_ports) ||
       buffer.lookupValue("n_ports", num_ports))
   {
     if (num_ports == 1)
@@ -385,7 +385,7 @@ BufferLevel::Specs BufferLevel::ParseSpecs(config::CompoundConfigNode level, std
   // Number of Banks.
   std::uint32_t num_banks = 2;
   specs.num_banks = num_banks;
-  if (buffer.lookupValue("num-banks", num_banks) ||
+  if (buffer.lookupValue("num_banks", num_banks) ||
       buffer.lookupValue("n_banks", num_banks))
   {
     specs.num_banks = num_banks;
@@ -419,9 +419,47 @@ BufferLevel::Specs BufferLevel::ParseSpecs(config::CompoundConfigNode level, std
     specs.write_bandwidth = write_bandwidth;
   }
 
+  std::map<std::string, double> bw_scales;
+  auto errstr = "ERROR: " + specs.name.Get() + ": per_dataspace_bandwidth_consumption_scale must be a map of (string dataspace) : (float scale)";
+  if (buffer.exists("per_dataspace_bandwidth_consumption_scale"))
+  {
+    auto per_dataspace_bandwidth_consumption_scale = buffer.lookup("per_dataspace_bandwidth_consumption_scale");
+    if(!per_dataspace_bandwidth_consumption_scale.isMap())
+    {
+      std::cerr << errstr << std::endl;
+      exit(1);
+    }
+    std::vector<std::string> keys;
+    per_dataspace_bandwidth_consumption_scale.getMapKeys(keys);
+    for (auto key : keys)
+    {
+      if (!per_dataspace_bandwidth_consumption_scale.lookupValue(key, bw_scales[key]))
+      {
+        std::cerr << errstr << std::endl;
+        exit(1);
+      }
+    }
+  }
+  for (unsigned i = 0; i < problem::GetShape()->NumDataSpaces; i++) specs.bandwidth_consumption_scale[i] = 1.0;
+  for (auto key : bw_scales)
+  {
+    if (problem::GetShape()->DataSpaceNameToID.find(key.first) != problem::GetShape()->DataSpaceNameToID.end())
+    {
+      auto dim_id = problem::GetShape()->DataSpaceNameToID.at(key.first);
+      specs.bandwidth_consumption_scale[dim_id] = key.second;
+    }
+    else
+    {
+      std::cerr << "ERROR: " << specs.name.Get()
+                << ": per_dataspace_bandwidth_consumption_scale: " << key.first
+                << " is not a valid dimension name." << std::endl;
+      exit(1);
+    }
+  }
+
   // Multiple-buffering factor (e.g., 2.0 means double buffering)
   double multiple_buffering;
-  if (buffer.lookupValue("multiple-buffering", multiple_buffering))
+  if (buffer.lookupValue("multiple_buffering", multiple_buffering))
   {
     specs.multiple_buffering = multiple_buffering;
   }
@@ -444,7 +482,7 @@ BufferLevel::Specs BufferLevel::ParseSpecs(config::CompoundConfigNode level, std
 
   // Minimum utilization factor (e.g., 1.0 requires full utilization of effective capacity)
   double min_utilizaiton;
-  if (buffer.lookupValue("min-utilization", min_utilizaiton))
+  if (buffer.lookupValue("min_utilization", min_utilizaiton))
   {
     specs.min_utilization = min_utilizaiton;
   }
@@ -505,6 +543,12 @@ BufferLevel::Specs BufferLevel::ParseSpecs(config::CompoundConfigNode level, std
     specs.update_network_name = update_network_name;
   }
 
+  std::string power_gated_at_name;
+  if (buffer.lookupValue("power_gated_at", power_gated_at_name))
+  {
+    specs.power_gated_at_name = power_gated_at_name;
+  }
+
   // Overbooking Spec
   bool allow_overbooking;
   if (buffer.lookupValue("allow_overbooking", allow_overbooking)){
@@ -555,7 +599,7 @@ BufferLevel::Specs BufferLevel::ParseSpecs(config::CompoundConfigNode level, std
   // Allow user to override the access energy.
   // Also store that the vector access energy is from the user rather than the PAT;
   // this will be referenced in UpdateOpEnergyViaERT() above.
-  bool user_specified_access_energy = buffer.lookupValue("vector-access-energy", tmp_access_energy);
+  bool user_specified_access_energy = buffer.lookupValue("vector_access_energy", tmp_access_energy);
   if (user_specified_access_energy)
   {
     specs.access_energy_source = "user";
@@ -566,7 +610,7 @@ BufferLevel::Specs BufferLevel::ParseSpecs(config::CompoundConfigNode level, std
 
   // Allow user to override the addr gen energy.
   double tmp_addr_gen_energy = -0.1;
-  bool user_specified_addr_gen_energy = buffer.lookupValue("addr-gen-energy", tmp_addr_gen_energy);
+  bool user_specified_addr_gen_energy = buffer.lookupValue("addr_gen_energy", tmp_addr_gen_energy);
   specs.addr_gen_energy = tmp_addr_gen_energy;
   if (user_specified_addr_gen_energy)
   {
@@ -578,7 +622,7 @@ BufferLevel::Specs BufferLevel::ParseSpecs(config::CompoundConfigNode level, std
 
   // Allow user to override the cluster area.
   double tmp_cluster_area = 0;
-  buffer.lookupValue("cluster-area", tmp_cluster_area);
+  buffer.lookupValue("cluster_area", tmp_cluster_area);
   if (tmp_cluster_area > 0)
   {
     tmp_storage_area = tmp_cluster_area / specs.cluster_size.Get();
@@ -775,6 +819,7 @@ EvalStatus BufferLevel::PreEvaluationCheck(
 
     // Find the total capacity required by all un-masked data types.
     std::size_t required_capacity = 0;
+    bool quantize = false;
     double confidence_constraint = ! specs_.allow_overbooking.Get() ? 1.0 : confidence_threshold;
     for (unsigned pvi = 0; pvi < unsigned(problem::GetShape()->NumDataSpaces); pvi++)
     {
@@ -797,9 +842,16 @@ EvalStatus BufferLevel::PreEvaluationCheck(
         {
           working_set_size = ceil(dense_working_set_size * confidence_constraint);
         }
+
+        quantize = false;
+        if (workload->IsBitwidthSpecified(pvi) && (specs_.word_bits.Get() > 1))
+        {
+          assert(workload->GetBitwidth(pvi) <= (specs_.word_bits.Get()) && (workload->GetBitwidth(pvi) > 0));
+          quantize = true;
+        }
         
         /* Quantization addition */
-        if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && workload->GetBitwidth(pvi) > 0)
+        if (quantize && workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && workload->GetBitwidth(pvi) > 0)
         {
           // Check that the specified data operand bitwidth is not greater than the word bits
           if (workload->GetBitwidth(pvi) > specs_.word_bits.Get())
@@ -908,6 +960,19 @@ void BufferLevel::ConnectDrain(std::shared_ptr<Network> network)
   network_drain_ = network;
 }
 
+void BufferLevel::SetPowerGatedAt(std::shared_ptr<BufferLevel> other)
+{
+  power_gated_at_ = other;
+  power_gated_at_other_ = true;
+}
+
+BufferLevel BufferLevel::GetPowerGater()
+{
+  if (!power_gated_at_other_) return *this;
+  return *power_gated_at_;
+}
+
+
 std::uint64_t BufferLevel::ComputeMetaDataTileSizeInBits(const tiling::MetaDataTileOccupancy metadata_occupancy) const
 {
   double size = 0;
@@ -945,9 +1010,16 @@ void BufferLevel::ComputeTileOccupancyAndConfidence(const problem::Workload* wor
   problem::PerDataSpace<double> expected_data_tile_sizes;
   // problem::PerDataSpace<double> expected_metadata_tile_sizes;
   problem::PerDataSpace<double> expected_metadata_tile_sizes_bits;
+  bool quantize = false;
 
   for (unsigned pvi = 0; pvi < unsigned(problem::GetShape()->NumDataSpaces); pvi++)
   {
+    quantize = false;
+    if (workload->IsBitwidthSpecified(pvi) && (specs_.word_bits.Get() > 1))
+    {
+      assert(workload->GetBitwidth(pvi) <= (specs_.word_bits.Get()) && (workload->GetBitwidth(pvi) > 0));
+      quantize = true;
+    }
 
     if (tile[pvi].shape == 0)
     {
@@ -960,7 +1032,7 @@ void BufferLevel::ComputeTileOccupancyAndConfidence(const problem::Workload* wor
     if (tile[pvi].compressed)
     {
       /* Quantization addition – we need to reflect the operand bitwidth on the buffer's expected utilized memory capacity */
-      if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && workload->GetBitwidth(pvi) > 0)
+      if (quantize && workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && workload->GetBitwidth(pvi) > 0)
         expected_data_tile_sizes[pvi] = static_cast<double>(std::ceil(tile[pvi].expected_data_occupancy / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
       else
         expected_data_tile_sizes[pvi] = tile[pvi].expected_data_occupancy;
@@ -970,7 +1042,7 @@ void BufferLevel::ComputeTileOccupancyAndConfidence(const problem::Workload* wor
     else
     {
       /* Quantization addition – we need to reflect the operand bitwidth on the buffer's expected utilized memory capacity */
-      if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && workload->GetBitwidth(pvi) > 0)
+      if (quantize && workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && workload->GetBitwidth(pvi) > 0)
         expected_data_tile_sizes[pvi] = static_cast<double>(std::ceil(tile[pvi].shape / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
       else
         expected_data_tile_sizes[pvi] = tile[pvi].shape;
@@ -1001,6 +1073,7 @@ void BufferLevel::ComputeTileOccupancyAndConfidence(const problem::Workload* wor
     tiling::MetaDataTileOccupancy metadata_tile_occupancy;
     // std::uint64_t metadata_tile_size = 0;
     std::uint64_t metadata_tile_size_bits = 0;
+    bool quantize = false;
 
     // compute tile occupancy and associated confidence
     // if the tile is not compressed, the confidence is just zero or one derived directly by a comparison of tile shape and allocated capacity
@@ -1113,7 +1186,13 @@ void BufferLevel::ComputeTileOccupancyAndConfidence(const problem::Workload* wor
     stats_.tile_density_distribution[pv] = tile[pvi].GetDensityType();
     stats_.metadata_format[pv] = tile[pvi].GetMetaDataFormatName();
     /* Quantization addition – we need to reflect the operand bitwidth on the buffer's utilized memory capacity */
-    if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && workload->GetBitwidth(pvi) > 0)
+    quantize = false;
+    if (workload->IsBitwidthSpecified(pvi) && (specs_.word_bits.Get() > 1))
+    {
+      assert(workload->GetBitwidth(pvi) <= (specs_.word_bits.Get()) && (workload->GetBitwidth(pvi) > 0));
+      quantize = true;
+    }
+    if (quantize && workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && workload->GetBitwidth(pvi) > 0)
       stats_.utilized_capacity[pv] = static_cast<double>(std::ceil(data_tile_size / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
     else
       stats_.utilized_capacity[pv] = data_tile_size;
@@ -1141,13 +1220,21 @@ EvalStatus BufferLevel::ComputeScalarAccesses(const problem::Workload* workload,
   //
   // 1. Collect stats (stats are always collected per-DataSpaceID).
   //
+  bool quantize = false;
 
   for (unsigned pvi = 0; pvi < unsigned(problem::GetShape()->NumDataSpaces); pvi++)
   {
     auto pv = problem::Shape::DataSpaceID(pvi);
-    if (workload->IsBitwidthSpecified(pvi)) assert(workload->GetBitwidth(pvi) <= (specs_.word_bits.Get()) && (workload->GetBitwidth(pvi) > 0));
+    quantize = false;
+    // The specs_.word_bits.Get() > 1 is for DummyBuffers
+    if (workload->IsBitwidthSpecified(pvi) && (specs_.word_bits.Get() > 1))
+    {
+      assert(workload->GetBitwidth(pvi) <= (specs_.word_bits.Get()) && (workload->GetBitwidth(pvi) > 0));
+      quantize = true;
+    }
 
     stats_.keep[pv] = mask[pv];
+    stats_.no_coalesce[pv] = tile[pvi].no_coalesce;
 
     // Partition size is the total number of unique elements in each tensor that flow through that unit over the course of execution 
     stats_.partition_size[pv] = tile[pvi].partition_size;
@@ -1201,7 +1288,7 @@ EvalStatus BufferLevel::ComputeScalarAccesses(const problem::Workload* workload,
     for(auto iter = tile[pvi].fine_grained_data_accesses.begin(); iter != tile[pvi].fine_grained_data_accesses.end(); ++iter)
     {
       /* Quantization addition */
-      if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
+      if (quantize && workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
         stats_.fine_grained_scalar_accesses[pvi][iter->first] = static_cast<std::uint64_t>(std::ceil(iter->second / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
       else
         stats_.fine_grained_scalar_accesses[pvi][iter->first] = iter->second;
@@ -1215,7 +1302,7 @@ EvalStatus BufferLevel::ComputeScalarAccesses(const problem::Workload* workload,
     }
    
     /* Quantization addition */
-    if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
+    if (quantize && workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
     {
       stats_.reads[pv] = static_cast<std::uint64_t>(std::ceil(tile[pvi].reads / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
       stats_.updates[pv] = static_cast<std::uint64_t>(std::ceil(tile[pvi].updates / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
@@ -1282,7 +1369,7 @@ EvalStatus BufferLevel::ComputeScalarAccesses(const problem::Workload* workload,
     stats_.gated_format_fills[pv] = stats_.fine_grained_format_scalar_accesses[pv]["gated_metadata_fill"];
     stats_.gated_format_updates[pv] = stats_.fine_grained_format_scalar_accesses[pv]["gated_metadata_update"];
 
-    if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
+    if (quantize && workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
     {
       stats_.operands_per_word[pv] = static_cast<std::uint64_t>(std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi)));
       stats_.wasted_bits[pv] = specs_.word_bits.Get() % workload->GetBitwidth(pvi);  
@@ -1433,11 +1520,42 @@ EvalStatus BufferLevel::ComputeScalarAccesses(const problem::Workload* workload,
   return eval_status;
 }
 
+void BufferLevel::ComputeLeaksPerCycle(){
+  auto power_gater = GetPowerGater();
+  auto stats_from = GetPowerGater().stats_;
+  double my_instances = specs_.instances.Get();
+  double from_instances = power_gater.specs_.instances.Get();
+  from_instances = from_instances > 0 ? from_instances : 1;
+  double max_my_utilized = 1;
+  double max_from_utilized = 1;
+  for (unsigned pvi = 0; pvi < unsigned(problem::GetShape()->NumDataSpaces); pvi++)
+  {
+    auto pv = problem::Shape::DataSpaceID(pvi);
+    max_my_utilized = std::max(max_my_utilized, (double) stats_.utilized_instances[pv]);
+    max_from_utilized = std::max(max_from_utilized, (double) stats_from.utilized_instances[pv]);
+  }
+  stats_.n_instances_sharing_power_gating = my_instances / from_instances;
+  
+  if (stats_.n_instances_sharing_power_gating > 1)
+  {
+    stats_.leaks_per_cycle = stats_.n_instances_sharing_power_gating * max_from_utilized;
+    if(stats_.leaks_per_cycle > 0) stats_.non_power_gated_utilization = max_my_utilized / stats_.leaks_per_cycle;
+    else stats_.non_power_gated_utilization = 0;
+  }
+  else // There are more power gates available than instances, so power gate each instance individually.
+  {
+    stats_.n_instances_sharing_power_gating = 1;
+    stats_.leaks_per_cycle = max_my_utilized;
+    stats_.non_power_gated_utilization = 1;
+  }
+}
+
 void BufferLevel::ComputeVectorAccesses(const problem::Workload* workload, const tiling::CompoundDataMovementInfo& tile){
 
   // calculate fine-grained vector accesses
   auto block_size = specs_.block_size.Get();
   // auto metadata_block_size = specs_.default_md_block_size.Get();
+  bool quantize = false;
 
   for (unsigned pvi = 0; pvi < unsigned(problem::GetShape()->NumDataSpaces); pvi++)
   {
@@ -1499,7 +1617,13 @@ void BufferLevel::ComputeVectorAccesses(const problem::Workload* workload, const
     {
       /* Quantization addition */
       unsigned long accesses;
-      if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
+      quantize = false;
+      if (workload->IsBitwidthSpecified(pvi) && (specs_.word_bits.Get() > 1))
+      {
+        assert(workload->GetBitwidth(pvi) <= (specs_.word_bits.Get()) && (workload->GetBitwidth(pvi) > 0));
+        quantize = true;
+      }
+      if (quantize && workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
         accesses = static_cast<unsigned long>(std::ceil(iter->second / std::floor(specs_.word_bits.Get() / workload->GetBitwidth(pvi))));
       else
         accesses = iter->second;
@@ -1600,7 +1724,7 @@ void BufferLevel::ComputeEnergyDueToChildLevelOverflow(Stats child_level_stats, 
 }
 
 
-double BufferLevel::OperationalIntensity(std::uint64_t total_ops) {
+double BufferLevel::OperationalIntensity(std::uint64_t total_ops) const {
   if (Accesses() > 0) {
     return double(total_ops) / double((Accesses() * specs_.word_bits.Get() / 8));
   } else {
@@ -1609,7 +1733,8 @@ double BufferLevel::OperationalIntensity(std::uint64_t total_ops) {
 }
 
 
-void BufferLevel::FinalizeBufferEnergy() {
+void BufferLevel::FinalizeBufferEnergy(uint64_t total_cycles) {
+  stats_.leakage_energy = specs_.op_energy_map.at("leak") * total_cycles * stats_.leaks_per_cycle;
 
   for (unsigned pvi = 0; pvi < unsigned(problem::GetShape()->NumDataSpaces); pvi++) {
     auto pv = problem::Shape::DataSpaceID(pvi);
@@ -1627,6 +1752,7 @@ void BufferLevel::FinalizeBufferEnergy() {
       stats_.energy_due_to_overflow[pv] = stats_.cluster_access_energy_due_to_overflow.at(pv) / cluster_utilization;
     } else {
       stats_.energy[pv] = 0;
+      stats_.energy_per_algorithmic_access[pv] = stats_.energy.at(pv);
       stats_.energy_per_access[pv] = 0;
       stats_.energy_due_to_overflow[pv] = 0;
     }
@@ -1638,13 +1764,21 @@ void BufferLevel::FinalizeBufferEnergy() {
 //
 void BufferLevel::ComputeReductionEnergy(const problem::Workload* workload)
 {
+  bool quantize = false;
   // Temporal reduction: add a value coming in on the network to a value stored locally.
   for (unsigned pvi = 0; pvi < unsigned(problem::GetShape()->NumDataSpaces); pvi++)
   {
     auto pv = problem::Shape::DataSpaceID(pvi);
     if (problem::GetShape()->IsReadWriteDataSpace.at(pv))
     {
-      if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))  
+      /* Quantization addition */
+      quantize = false;
+      if (workload->IsBitwidthSpecified(pvi) && (specs_.word_bits.Get() > 1))
+      {
+        assert(workload->GetBitwidth(pvi) <= (specs_.word_bits.Get()) && (workload->GetBitwidth(pvi) > 0));
+        quantize = true;
+      }
+      if (quantize && workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
         stats_.temporal_reduction_energy[pv] = stats_.temporal_reductions[pv] * 
           pat::AdderEnergy(workload->GetBitwidth(pvi), workload->GetBitwidth(pvi));
       else
@@ -1732,8 +1866,8 @@ void BufferLevel::ComputePerformance(const std::uint64_t compute_cycles)
     total_write_accesses =  ceil((double)total_write_accesses/scaling_ratio);
     
     // Convert to bandwidth requirement per cycle
-    unconstrained_read_bandwidth[pv] = (double(total_read_accesses) / compute_cycles);
-    unconstrained_write_bandwidth[pv] = (double(total_write_accesses) / compute_cycles);
+    unconstrained_read_bandwidth[pv] = (double(total_read_accesses) / compute_cycles) * specs_.bandwidth_consumption_scale[pv];
+    unconstrained_write_bandwidth[pv] = (double(total_write_accesses) / compute_cycles) * specs_.bandwidth_consumption_scale[pv]; 
   }
 
   //
@@ -1814,13 +1948,15 @@ STAT_ACCESSOR(double, BufferLevel, AddrGenEnergy, stats_.addr_gen_energy.at(pv) 
 STAT_ACCESSOR(double, BufferLevel, Energy,
               StorageEnergy(pv) +
               TemporalReductionEnergy(pv) +
-              AddrGenEnergy(pv))
+              AddrGenEnergy(pv) + 
+              LeakageEnergy(pv))
 
 STAT_ACCESSOR(std::uint64_t, BufferLevel, Accesses, stats_.utilized_instances.at(pv) * (stats_.reads.at(pv) + stats_.updates.at(pv) + stats_.fills.at(pv)))
 STAT_ACCESSOR(std::uint64_t, BufferLevel, UtilizedCapacity, stats_.utilized_capacity.at(pv))
 STAT_ACCESSOR(std::uint64_t, BufferLevel, TileSize, stats_.tile_size.at(pv))
 STAT_ACCESSOR(std::uint64_t, BufferLevel, UtilizedInstances, stats_.utilized_instances.at(pv))
 STAT_ACCESSOR(std::uint64_t, BufferLevel, TotalUtilizedBytes, stats_.utilized_capacity.at(pv) * stats_.utilized_instances.at(pv) * specs_.word_bits.Get() / 8)
+STAT_ACCESSOR(double, BufferLevel, LeakageEnergy, stats_.leakage_energy / (pv == problem::GetShape()->NumDataSpaces ? 1 : problem::GetShape()->NumDataSpaces))
 
 std::string BufferLevel::Name() const
 {
@@ -1909,60 +2045,66 @@ void BufferLevel::Print(std::ostream& out) const
   if (specs_.is_sparse_module.Get())
   {
   
-    out << indent << indent << "Technology                   : " << specs.technology << std::endl;
-    out << indent << indent << "Data storage size            : " << specs.size << std::endl;
-    out << indent << indent << "Data word bits               : " << specs.word_bits << std::endl;
-    out << indent << indent << "Data block size              : " << specs.block_size << std::endl;
-    out << indent << indent << "Metadata storage width(bits) : " << specs.metadata_storage_width << std::endl;
-    out << indent << indent << "Metadata storage depth       : " << specs.metadata_storage_depth << std::endl;
-    //out << indent << indent << "Metadata word bits           : " << specs.default_md_word_bits.Get() << std::endl;
-    //out << indent << indent << "Metadata block size          : " << specs.default_md_block_size.Get() << std::endl;
-    out << indent << indent << "Cluster size                 : " << specs.cluster_size << std::endl;
-    out << indent << indent << "Instances                    : " << specs.instances << " ("
+    out << indent << indent << "Technology                      : " << specs.technology << std::endl;
+    out << indent << indent << "Data storage size               : " << specs.size << std::endl;
+    out << indent << indent << "Data word bits                  : " << specs.word_bits << std::endl;
+    out << indent << indent << "Data block size                 : " << specs.block_size << std::endl;
+    out << indent << indent << "Metadata storage width(bits)    : " << specs.metadata_storage_width << std::endl;
+    out << indent << indent << "Metadata storage depth          : " << specs.metadata_storage_depth << std::endl;
+    //out << indent << indent << "Metadata word bits            : " << specs.default_md_word_bits.Get() << std::endl;
+    //out << indent << indent << "Metadata block size           : " << specs.default_md_block_size.Get() << std::endl;
+    out << indent << indent << "Cluster size                    : " << specs.cluster_size << std::endl;
+    out << indent << indent << "Instances                       : " << specs.instances << " ("
         << specs.meshX << "*" << specs.meshY << ")" << std::endl;
-    out << indent << indent << "Shared bandwidth             : " << specs.shared_bandwidth << std::endl;
-    out << indent << indent << "Read bandwidth               : " << specs.read_bandwidth << std::endl;    
-    out << indent << indent << "Write bandwidth              : " << specs.write_bandwidth << std::endl;    
-    out << indent << indent << "Multiple buffering           : " << specs.multiple_buffering << std::endl;
-    //out << indent << indent << "Allow overbooking            : " << specs.allow_overbooking << std::endl;
-    out << indent << indent << "Effective data storage size  : " << specs.effective_size << std::endl;
-    out << indent << indent << "Min utilization              : " << specs.min_utilization << std::endl;
-    //out << indent << indent << "Vector access energy(max)    : " << specs.vector_access_energy << " pJ" << std::endl;
-    //out << indent << indent << "Vector gated read energy     : " << specs.op_energy_map.at("gated_read") << " pJ" << std::endl;
-    //out << indent << indent << "Vector skipped read energy   : " << specs.op_energy_map.at("skipped_read") << " pJ" << std::endl;
-    out << indent << indent << "Vector read energy           : " << specs.op_energy_map.at("random_read") << " pJ" << std::endl;
-    //out << indent << indent << "Vector gated write energy    : " << specs.op_energy_map.at("gated_fill") << " pJ" << std::endl;
-    //out << indent << indent << "Vector skipped write energy  : " << specs.op_energy_map.at("skipped_fill") << " pJ" << std::endl;
-    out << indent << indent << "Vector write energy          : " << specs.op_energy_map.at("random_fill") << " pJ" << std::endl;
-    //out << indent << indent << "Vector gated update energy   : " << specs.op_energy_map.at("gated_update") << " pJ" << std::endl;
-    //out << indent << indent << "Vector skipped update energy : " << specs.op_energy_map.at("skipped_update") << " pJ" << std::endl;
-    //out << indent << indent << "Vector random update energy  : " << specs.op_energy_map.at("random_update") << " pJ" << std::endl;
-    out << indent << indent << "Vector metadata read energy  : " << specs.op_energy_map.at("random_metadata_read") << " pJ" << std::endl;
-    out << indent << indent << "Vector metadata write energy : " << specs.op_energy_map.at("random_metadata_fill") << " pJ" << std::endl;
-    out << indent << indent << "(De)compression energy       : " << specs.op_energy_map.at("decompression_count") << " pJ" << std::endl;
-    out << indent << indent << "Area                         : " << specs.storage_area << " um^2" << std::endl;
-
+    out << indent << indent << "Shared bandwidth                : " << specs.shared_bandwidth << std::endl;
+    out << indent << indent << "Read bandwidth                  : " << specs.read_bandwidth << std::endl;    
+    out << indent << indent << "Write bandwidth                 : " << specs.write_bandwidth << std::endl;    
+    out << indent << indent << "Multiple buffering              : " << specs.multiple_buffering << std::endl;
+    //out << indent << indent << "Allow overbooking             : " << specs.allow_overbooking << std::endl;
+    out << indent << indent << "Effective data storage size     : " << specs.effective_size << std::endl;
+    out << indent << indent << "Min utilization                 : " << specs.min_utilization << std::endl;
+    //out << indent << indent << "Vector access energy(max)     : " << specs.vector_access_energy << " pJ" << std::endl;
+    //out << indent << indent << "Vector gated read energy      : " << specs.op_energy_map.at("gated_read") << " pJ" << std::endl;
+    //out << indent << indent << "Vector skipped read energy    : " << specs.op_energy_map.at("skipped_read") << " pJ" << std::endl;
+    out << indent << indent << "Vector read energy              : " << specs.op_energy_map.at("random_read") << " pJ" << std::endl;
+    //out << indent << indent << "Vector gated write energy     : " << specs.op_energy_map.at("gated_fill") << " pJ" << std::endl;
+    //out << indent << indent << "Vector skipped write energy   : " << specs.op_energy_map.at("skipped_fill") << " pJ" << std::endl;
+    out << indent << indent << "Vector write energy             : " << specs.op_energy_map.at("random_fill") << " pJ" << std::endl;
+    //out << indent << indent << "Vector gated update energy    : " << specs.op_energy_map.at("gated_update") << " pJ" << std::endl;
+    //out << indent << indent << "Vector skipped update energy  : " << specs.op_energy_map.at("skipped_update") << " pJ" << std::endl;
+    //out << indent << indent << "Vector random update energy   : " << specs.op_energy_map.at("random_update") << " pJ" << std::endl;
+    out << indent << indent << "Vector metadata read energy     : " << specs.op_energy_map.at("random_metadata_read") << " pJ" << std::endl;
+    out << indent << indent << "Vector metadata write energy    : " << specs.op_energy_map.at("random_metadata_fill") << " pJ" << std::endl;
+    out << indent << indent << "(De)compression energy          : " << specs.op_energy_map.at("decompression_count") << " pJ" << std::endl;
+    out << indent << indent << "Per-instance-cycle leakage      : " << specs.op_energy_map.at("leak") << " pJ" << std::endl;
+    out << indent << indent << "Instances sharing power gating  : " << stats.n_instances_sharing_power_gating << std::endl;
+    out << indent << indent << "Non-power-gated utilization     : " << OUT_PERCENT(stats.non_power_gated_utilization) << std::endl;
+    out << indent << indent << "Leakage energy (total)          : " << stats.leakage_energy << " pJ" << std::endl;
+    out << indent << indent << "Area                            : " << specs.storage_area << " um^2" << std::endl;
     out << std::endl;
   }
   else
   {
-    out << indent << indent << "Technology                  : " << specs.technology << std::endl;
-    out << indent << indent << "Size                        : " << specs.size << std::endl;
-    out << indent << indent << "Word bits                   : " << specs.word_bits << std::endl;
-    out << indent << indent << "Block size                  : " << specs.block_size << std::endl;
-    out << indent << indent << "Cluster size                : " << specs.cluster_size << std::endl;
-    out << indent << indent << "Instances                   : " << specs.instances << " ("
+    out << indent << indent << "Technology                      : " << specs.technology << std::endl;
+    out << indent << indent << "Size                            : " << specs.size << std::endl;
+    out << indent << indent << "Word bits                       : " << specs.word_bits << std::endl;
+    out << indent << indent << "Block size                      : " << specs.block_size << std::endl;
+    out << indent << indent << "Cluster size                    : " << specs.cluster_size << std::endl;
+    out << indent << indent << "Instances                       : " << specs.instances << " ("
         << specs.meshX << "*" << specs.meshY << ")" << std::endl;
-    out << indent << indent << "Shared bandwidth            : " << specs.shared_bandwidth << std::endl;
-    out << indent << indent << "Read bandwidth              : " << specs.read_bandwidth << std::endl;
-    out << indent << indent << "Write bandwidth             : " << specs.write_bandwidth << std::endl;
-    out << indent << indent << "Multiple buffering          : " << specs.multiple_buffering << std::endl;
-    out << indent << indent << "Effective size              : " << specs.effective_size << std::endl;
-    out << indent << indent << "Min utilization             : " << specs.min_utilization << std::endl;
-    out << indent << indent << "Vector access energy        : " << specs.vector_access_energy << " pJ" << std::endl;
-    out << indent << indent << "Vector access energy source : " << specs.access_energy_source << std::endl;
-    out << indent << indent << "Area                        : " << specs.storage_area << " um^2" << std::endl;
-
+    out << indent << indent << "Shared bandwidth                : " << specs.shared_bandwidth << std::endl;
+    out << indent << indent << "Read bandwidth                  : " << specs.read_bandwidth << std::endl;
+    out << indent << indent << "Write bandwidth                 : " << specs.write_bandwidth << std::endl;
+    out << indent << indent << "Multiple buffering              : " << specs.multiple_buffering << std::endl;
+    out << indent << indent << "Effective size                  : " << specs.effective_size << std::endl;
+    out << indent << indent << "Min utilization                 : " << specs.min_utilization << std::endl;
+    out << indent << indent << "Vector access energy            : " << specs.vector_access_energy << " pJ" << std::endl;
+    out << indent << indent << "Vector access energy source     : " << specs.access_energy_source << std::endl;
+    out << indent << indent << "Per-instance-cycle leakage      : " << specs.op_energy_map.at("leak") << " pJ" << std::endl;
+    out << indent << indent << "Instances sharing power gating  : " << stats.n_instances_sharing_power_gating << std::endl;
+    out << indent << indent << "Non-power-gated utilization     : " << OUT_PERCENT(stats.non_power_gated_utilization) << std::endl;
+    out << indent << indent << "Leakage energy (total)          : " << stats.leakage_energy << " pJ" << std::endl;
+    out << indent << indent << "Area                            : " << specs.storage_area << " um^2" << std::endl;
     out << std::endl;
   }
   
@@ -2166,14 +2308,15 @@ void BufferLevel::Print(std::ostream& out) const
 
         out << indent + indent << "Address Generation Energy (per-cluster)                     : " << stats.addr_gen_energy.at(pv) << " pJ" << std::endl;
         out << indent + indent << "Address Generation Energy (total)                           : " << stats.addr_gen_energy.at(pv) * stats.utilized_clusters.at(pv) << " pJ" << std::endl;
+        out << indent + indent << "Bandwidth Consumption Scale                                 : " << specs.bandwidth_consumption_scale.at(pv) << std::endl;
         out << indent + indent << "Average Shared Bandwidth (per-instance)                     : " << stats.shared_bandwidth.at(pv) << " words/cycle" << std::endl;
-        out << indent + indent + indent << "Breakdown (Data, Format): (" << 100 * (1 - stats.format_shared_bandwidth_ratio.at(pv)) << "%, " << 100 * (stats.format_shared_bandwidth_ratio.at(pv)) << "%)"<< std::endl;
+        out << indent + indent + indent << "Breakdown (Data, Format): (" << OUT_PERCENT(1 - stats.format_shared_bandwidth_ratio.at(pv)) << ", " << OUT_PERCENT(stats.format_shared_bandwidth_ratio.at(pv)) << std::endl;
         out << indent + indent << "Shared Bandwidth (total)                                    : " << stats.shared_bandwidth.at(pv) * stats.utilized_x_expansion.at(pv) * stats.utilized_y_expansion.at(pv) << " words/cycle" << std::endl;
         out << indent + indent << "Average Read Bandwidth (per-instance)                       : " << stats.read_bandwidth.at(pv) << " words/cycle" << std::endl;
-        out << indent + indent + indent << "Breakdown (Data, Format): (" << 100 * (1 - stats.format_read_bandwidth_ratio.at(pv)) << "%, " << 100 * (stats.format_read_bandwidth_ratio.at(pv)) << "%)"<< std::endl;
+        out << indent + indent + indent << "Breakdown (Data, Format): (" << OUT_PERCENT(1 - stats.format_read_bandwidth_ratio.at(pv)) << ", " << OUT_PERCENT(stats.format_read_bandwidth_ratio.at(pv)) << ")"<< std::endl;
         out << indent + indent << "Read Bandwidth (total)                                      : " << stats.read_bandwidth.at(pv) * stats.utilized_x_expansion.at(pv) * stats.utilized_y_expansion.at(pv) << " words/cycle" << std::endl;
         out << indent + indent << "Average Write Bandwidth (per-instance)                      : " << stats.write_bandwidth.at(pv) << " words/cycle" << std::endl;
-        out << indent + indent + indent << "Breakdown (Data, Format): (" << 100 * (1 - stats.format_write_bandwidth_ratio.at(pv)) << "%, " << 100 * (stats.format_write_bandwidth_ratio.at(pv)) << "%)"<< std::endl;
+        out << indent + indent + indent << "Breakdown (Data, Format): (" << OUT_PERCENT(1 - stats.format_write_bandwidth_ratio.at(pv)) << ", " << OUT_PERCENT(stats.format_write_bandwidth_ratio.at(pv)) << ")"<< std::endl;
         out << indent + indent << "Write Bandwidth (total)                                     : " << stats.write_bandwidth.at(pv) * stats.utilized_x_expansion.at(pv) * stats.utilized_y_expansion.at(pv) << " words/cycle" << std::endl;
       }
       else

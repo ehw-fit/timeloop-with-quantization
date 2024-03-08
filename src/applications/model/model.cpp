@@ -195,6 +195,7 @@ Application::Stats Application::Run()
   std::string csv_stats_file_name = out_prefix_ + ".stats.csv";
   std::string xml_file_name = out_prefix_ + ".map+stats.xml";
   std::string map_txt_file_name = out_prefix_ + ".map.txt";
+  std::string map_tenssella_file_name = out_prefix_ + ".map.tenssella.txt";
 
   model::Engine engine;
   engine.Spec(arch_specs_);
@@ -209,8 +210,8 @@ Application::Stats Application::Run()
   // mapping with one that fits but is higher cost and likely sub-optimal.
   // *However*, this only covers capacity failures due to temporal factors,
   // not instance failures due to spatial factors. It also possibly
-  // over-corrects since it bypasses *all* data-spaces at a failing level,
-  // while it's possible that bypassing a subset of data-spaces may have
+  // over-corrects since it bypasses *all* data_spaces at a failing level,
+  // while it's possible that bypassing a subset of data_spaces may have
   // caused the mapping to fit.
   if (auto_bypass_on_failure_)
   {
@@ -292,6 +293,10 @@ Application::Stats Application::Run()
   ar << BOOST_SERIALIZATION_NVP(mapping);
   const Application* a = this;
   ar << BOOST_SERIALIZATION_NVP(a);
+
+  // Print the mapping in Tenssella input format.
+  std::ofstream tenssella_out(map_tenssella_file_name);
+  mapping.PrintTenssella(tenssella_out);
 
   Stats stats;
   stats.cycles = engine.Cycles();

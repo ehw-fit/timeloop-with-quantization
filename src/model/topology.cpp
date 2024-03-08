@@ -35,6 +35,10 @@
 #include "sparse-analysis/sparse-analysis.hpp"
 #include "workload/workload.hpp"
 
+bool gHideInconsequentialStats =
+  (getenv("TIMELOOP_HIDE_INCONSEQUENTIAL_STATS") == NULL) ||
+  (strcmp(getenv("TIMELOOP_HIDE_INCONSEQUENTIAL_STATS"), "0") != 0);
+
 namespace model
 {
 
@@ -324,6 +328,18 @@ std::shared_ptr<BufferLevel::Specs> Topology::Specs::GetStorageLevel(unsigned st
   return std::static_pointer_cast<BufferLevel::Specs>(levels.at(level_id));
 }
 
+std::shared_ptr<BufferLevel::Specs> Topology::Specs::GetStorageLevel(std::string level_name) const
+{
+  for(auto level : levels)
+  {
+    if (level->level_name == level_name)
+    {
+      return std::static_pointer_cast<BufferLevel::Specs>(level);
+    }
+  }
+  return nullptr;
+}
+
 std::shared_ptr<ArithmeticUnits::Specs> Topology::Specs::GetArithmeticLevel() const
 {
   auto level_id = arithmetic_map;
@@ -361,9 +377,12 @@ std::ostream& operator << (std::ostream& out, const Topology& topology)
   int level_id = 0;
   for (auto& level : topology.levels_)
   {
-    out << "Level " << level_id << std::endl;
-    out << "-------" << std::endl;
-    out << *level;
+    if(!gHideInconsequentialStats || level->Accesses() != 0 || level->Energy() != 0)
+    {
+      out << "Level " << level_id << std::endl;
+      out << "-------" << std::endl;
+      out << *level;
+    }
     level_id++;
   }
 
@@ -376,18 +395,24 @@ std::ostream& operator << (std::ostream& out, const Topology& topology)
   {
     auto network_id = storage_level_id;
     auto network = topology.GetStorageLevel(storage_level_id)->GetReadNetwork();
-    out << "Network " << network_id << std::endl;
-    out << "---------" << std::endl;
-    out << *network;
+    if(!gHideInconsequentialStats || network->Energy() != 0)
+    {
+      out << "Network " << network_id << std::endl;
+      out << "---------" << std::endl;
+      out << *network;
+    }
   }
 #else
   int network_id = 0;
   for (auto& network : topology.networks_)
   {
-    out << "Network " << network_id << std::endl;
-    out << "---------" << std::endl;
-    out << *(network.second);
-    network_id++;
+    if(!gHideInconsequentialStats || network.second->Energy() != 0)
+    {
+      out << "Network " << network_id << std::endl;
+      out << "---------" << std::endl;
+      out << *(network.second);
+      network_id++;
+    }
   }
 #endif
 
@@ -481,7 +506,7 @@ out << std::endl
   if (topology.is_evaluated_)
   {
     out << "GFLOPs (@1GHz): " << float(total_ops)  / topology.stats_.cycles << std::endl;
-    out << "Utilization: " << topology.stats_.utilization << std::endl;
+    out << "Utilization: " << OUT_PERCENT(topology.stats_.utilization) << std::endl;
     out << "Cycles: " << topology.stats_.cycles << std::endl;
     out << "Energy: " << std::scientific << topology.stats_.energy / 1000000.0 << " uJ" << OUT_FLOAT_FORMAT << std::endl;
     out << "EDP(J*cycle): " << std::scientific << float(topology.stats_.cycles) * topology.stats_.energy / 1e12 << OUT_FLOAT_FORMAT << std::endl;
@@ -511,13 +536,13 @@ out << std::endl
     {
       all_titles = {"Algorithmic Computes", "Actual Computes"};
       all_num_computes = {topology.stats_.algorithmic_computes, topology.stats_.actual_computes};
-      all_units = {"pJ/Algorithmic-Compute", "pJ/Compute"};
+      all_units = {"fJ/Algorithmic-Compute", "fJ/Compute"};
     }
     else
     {
       all_titles = {"Computes"};
       all_num_computes = {topology.stats_.actual_computes};
-      all_units = {"pJ/Compute"};
+      all_units = {"fJ/Compute"};
     }
 
     for (unsigned i = 0; i < all_titles.size(); i++)
@@ -530,27 +555,30 @@ out << std::endl
       for (unsigned i = 0; i < topology.NumLevels(); i++)
       {
         auto level = topology.GetLevel(i);
+        if (gHideInconsequentialStats && level->Energy() == 0) continue;
         out << indent << std::setw(align) << std::left << level->Name() << "= "
-            << level->Energy() / num_computes << std::endl;
+            << level->Energy()*1000 / num_computes << std::endl;
       }
 
 #ifdef PRINT_NETWORKS_IN_LEGACY_ORDER
       for (unsigned storage_level_id = 0; storage_level_id < topology.NumStorageLevels(); storage_level_id++)
       {
         auto network = topology.GetStorageLevel(storage_level_id)->GetReadNetwork();
+        if(gHideInconsequentialStats && network->Energy() == 0) continue;
         out << indent << std::setw(align) << std::left << network->Name() << "= "
-            << network->Energy() / num_computes << std::endl;
+            << network->Energy()*1000 / num_computes << std::endl;
       }
 #else
       for (auto& network: topology.networks_)
       {
+        if(gHideInconsequentialStats && network.second->Energy() == 0) continue;
         out << indent << std::setw(align) << std::left << network.second->Name() << "= "
-            << network.second->Energy() / num_computes << std::endl;
+            << network.second->Energy()*1000 / num_computes << std::endl;
       }
 #endif
 
       out << indent << std::setw(align) << std::left << "Total" << "= "
-          << topology.Energy() / num_computes << std::endl;
+          << topology.Energy()*1000 / num_computes << std::endl;
     }
   }
   // Restore ios format state.
@@ -559,7 +587,8 @@ out << std::endl
   return out;
 }
 
-void  Topology::PrintOAVES(std::ostream& out, Mapping& mapping, bool log_oaves_mappings, std::string oaves_prefix, unsigned thread_id) const {
+void Topology::PrintOAVES(std::ostream &out, Mapping &mapping, bool log_oaves_mappings, std::string oaves_prefix, unsigned thread_id) const
+{
 
   // Report mapping's engine topology stats
   //pJ/Compute,Utilization,Cycles,Energy [uJ],EDP [J*cycle],Area [mm^2],Computes,Algorithmic computes
@@ -576,7 +605,7 @@ void  Topology::PrintOAVES(std::ostream& out, Mapping& mapping, bool log_oaves_m
   {
     // Get the buffer utilization of the innermost memory level
     unsigned first_storage_level_id = 0;
-    std::uint64_t total_utilization = GetStorageLevel(first_storage_level_id)->TotalUtilizedBytes();
+    std::uint64_t total_utilization = ViewStorageLevel(first_storage_level_id)->TotalUtilizedBytes();
 
     // Get the total output tensor size for calculating the total operations
     std::uint64_t total_output_size = 0;
@@ -591,7 +620,8 @@ void  Topology::PrintOAVES(std::ostream& out, Mapping& mapping, bool log_oaves_m
           unsigned inv_storage_level = NumStorageLevels() - 1 - storage_level_id;
           utilized_capacity = stats_.utilized_capacities.at(inv_storage_level).at(pv);
           // Use the last non-bypassed level with capacity size not equal to 0
-          if (utilized_capacity > 0) break;
+          if (utilized_capacity > 0)
+            break;
         }
         total_output_size += utilized_capacity;
       }
@@ -616,33 +646,37 @@ void  Topology::PrintOAVES(std::ostream& out, Mapping& mapping, bool log_oaves_m
     // Other stats
     //innermost memory level util,Op intensity(last memory level/DRAM),LastLevelAccesses
 
-    out << total_utilization << "," << op_per_byte << "," << GetStorageLevel(last_storage_level_id)->Accesses();
+    out << total_utilization << "," << op_per_byte << "," << ViewStorageLevel(last_storage_level_id)->Accesses();
     for (unsigned pvi = 0; pvi < problem::GetShape()->NumDataSpaces; pvi++)
     {
       // Other stats
       //per-dataspace first memory level (closest to PEs) bytes util
       auto pv = problem::Shape::DataSpaceID(pvi);
-      out << "," << GetStorageLevel(first_storage_level_id)->TotalUtilizedBytes(pv);
+      out << "," << ViewStorageLevel(first_storage_level_id)->TotalUtilizedBytes(pv);
     }
     for (unsigned pvi = 0; pvi < problem::GetShape()->NumDataSpaces; pvi++)
     {
       // Other stats
       //per-dataspace last memory level (DRAM) accesses
       auto pv = problem::Shape::DataSpaceID(pvi);
-      out << "," << GetStorageLevel(last_storage_level_id)->Accesses(pv);
+      out << "," << ViewStorageLevel(last_storage_level_id)->Accesses(pv);
     }
     // Other stats
     //current mapping, mapping file name if stored separately (or none)
     out << "," << mapping.PrintCompact();
-    if (log_oaves_mappings) {
+    if (log_oaves_mappings)
+    {
       std::stringstream oaves_mapping_ss;
-      // Format the mapping filename as <utilization>_<thread_id>.yaml
-      // Note that once a better mapping with the same utilization is found by the same thread this file will be updated
-      oaves_mapping_ss << oaves_prefix << "." << total_utilization << "_" << thread_id << ".yaml";
+      // Format the mapping filename as <utilization>_<thread_id>_<mapping_hash>.yaml
+      std::hash<std::string> hasher;
+      size_t hash = hasher(mapping.PrintCompact());
+      oaves_mapping_ss << oaves_prefix << "." << total_utilization << "_" << thread_id << "_" << std::hex << hash << ".yaml";
       std::string oaves_map_yaml_file_name = oaves_mapping_ss.str();
       out << "," << oaves_map_yaml_file_name << std::endl;
       OutputOAVESMappingYAML(mapping, oaves_map_yaml_file_name);
-    } else {
+    }
+    else
+    {
       out << ",None" << std::endl;
     }
   }
@@ -885,6 +919,19 @@ void Topology::Spec(const Topology::Specs& specs)
     outer_buffer->ConnectRead(read_fill_network);
     outer_buffer->ConnectUpdate(drain_update_network);
 
+    // Set the level that handles power gating for this one
+    if (!outer_buffer->GetSpecs().power_gated_at_name.IsSpecified())
+    {
+      outer_buffer->GetSpecs().power_gated_at_name = outer_buffer->GetSpecs().name;
+    }
+    auto power_gated_level = GetStorageLevel(outer_buffer->GetSpecs().power_gated_at_name.Get());
+    if (power_gated_level == nullptr)
+    {
+      std::cerr << "ERROR: power_gated_at buffer " << outer_buffer->GetSpecs().power_gated_at_name.Get() << " not found." << std::endl;
+      exit(1);
+    }
+    outer_buffer->SetPowerGatedAt(power_gated_level);
+
     if (!inner_is_arithmetic)
     {
       auto inner_buffer = std::static_pointer_cast<BufferLevel>(inner);
@@ -980,7 +1027,7 @@ Topology::Specs Topology::ParseSpecs(config::CompoundConfigNode storage,
   return specs;
 }
 
-// This function implements the "tree-like" hierarchical architecture description
+// This function implements the "tree_like" hierarchical architecture description
 // used in Accelergy v0.2. The lowest level is level 0 and should have
 // arithmetic units, while other level are level 1+ with some buffer/storage units
 Topology::Specs Topology::ParseTreeSpecs(config::CompoundConfigNode designRoot, bool is_sparse_topology)
@@ -1100,21 +1147,33 @@ unsigned Topology::NumNetworks() const
   return specs_.NumNetworks();
 }
 
-std::shared_ptr<Level> Topology::GetLevel(unsigned level_id) const
+std::shared_ptr<const Level> Topology::ViewLevel(const unsigned& level_id) const
 {
   return levels_.at(level_id);
 }
 
-std::shared_ptr<BufferLevel> Topology::GetStorageLevel(unsigned storage_level_id) const
+std::shared_ptr<const BufferLevel> Topology::ViewStorageLevel(const unsigned& storage_level_id) const
 {
   auto level_id = specs_.StorageMap(storage_level_id);
-  return std::static_pointer_cast<BufferLevel>(levels_.at(level_id));
+  return std::static_pointer_cast<const BufferLevel>(levels_.at(level_id));
 }
 
-std::shared_ptr<ArithmeticUnits> Topology::GetArithmeticLevel() const
+std::shared_ptr<const BufferLevel> Topology::ViewStorageLevel(const std::string& level_name) const
+{
+  for(auto level : levels_)
+  {
+    if (level->Name() == level_name)
+    {
+      return std::static_pointer_cast<const BufferLevel>(level);
+    }
+  }
+  return nullptr;
+}
+
+std::shared_ptr<const ArithmeticUnits> Topology::ViewArithmeticLevel() const
 {
   auto level_id = specs_.ArithmeticMap();
-  return std::static_pointer_cast<ArithmeticUnits>(levels_.at(level_id));
+  return std::static_pointer_cast<const ArithmeticUnits>(levels_.at(level_id));
 }
 
 void Topology::Reset()
@@ -1282,7 +1341,8 @@ std::vector<EvalStatus> Topology::Evaluate(Mapping& mapping,
 
   // Collapse tiles into a specified number of tiling levels. The solutions are
   // received in a set of per-problem::Shape::DataSpaceID arrays.
-  auto collapsed_tiles = tiling::CollapseTiles(tile_info_nest, specs_.NumStorageLevels(),
+  auto collapsed_tiles = tiling::CollapseTiles(tile_info_nest,
+                                               specs_.NumStorageLevels(),
                                                mapping.datatype_bypass_nest,
                                                distribution_supported,
                                                analysis->GetWorkload());
@@ -1326,7 +1386,7 @@ std::vector<EvalStatus> Topology::Evaluate(Mapping& mapping,
   // will only get the correct number of cycles if the eval of compute level is successful
   if (success_accum)
     compute_cycles = GetArithmeticLevel()->Cycles();
-
+  uint64_t total_cycles = compute_cycles;
 
   for (unsigned storage_level_id = 0; storage_level_id < NumStorageLevels(); storage_level_id++)
   {
@@ -1351,6 +1411,7 @@ std::vector<EvalStatus> Topology::Evaluate(Mapping& mapping,
                                      analysis->GetWorkload(),
                                      mapping.confidence_thresholds.at(storage_level_id),
                                      compute_cycles, break_on_failure);
+    total_cycles = std::max(total_cycles, storage_level->Cycles());
     eval_status.at(level_id) = s;
     success_accum &= s.success;
 
@@ -1382,7 +1443,8 @@ std::vector<EvalStatus> Topology::Evaluate(Mapping& mapping,
     for (unsigned storage_level_id = 0; storage_level_id < NumStorageLevels(); storage_level_id++)
     {
       auto storage_level = GetStorageLevel(storage_level_id);
-      storage_level->FinalizeBufferEnergy();
+      storage_level->ComputeLeaksPerCycle();
+      storage_level->FinalizeBufferEnergy(total_cycles);
     }
   }
 

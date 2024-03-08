@@ -37,6 +37,10 @@
 #include "model/network-simple-multicast.hpp"
 BOOST_CLASS_EXPORT(model::SimpleMulticastNetwork)
 
+bool gHideInconsequentialStatsNetworkMulticast =
+  (getenv("TIMELOOP_HIDE_INCONSEQUENTIAL_STATS") == NULL) ||
+  (strcmp(getenv("TIMELOOP_HIDE_INCONSEQUENTIAL_STATS"), "0") != 0);
+
 namespace model
 {
 
@@ -75,11 +79,11 @@ SimpleMulticastNetwork::Specs SimpleMulticastNetwork::ParseSpecs(config::Compoun
 
   // Word Bits.
   std::uint32_t word_bits;
-  if (network.lookupValue("network-word-bits", word_bits))
+  if (network.lookupValue("network_word_bits", word_bits))
   {
     specs.word_bits = word_bits;
   }
-  else if (network.lookupValue("word-bits", word_bits) ||
+  else if (network.lookupValue("word_bits", word_bits) ||
            network.lookupValue("word_width", word_bits) ||
            network.lookupValue("datawidth", word_bits) )
   {
@@ -243,6 +247,7 @@ EvalStatus SimpleMulticastNetwork::Evaluate(const problem::Workload* workload,
   (void) break_on_failure;
 
   tiling::CompoundDataMovementInfo data_movement = tile.data_movement_info;
+  bool quantize = false;
   
   // Get stats from the CompoundTile
   for (unsigned pvi = 0; pvi < unsigned(problem::GetShape()->NumDataSpaces); pvi++)
@@ -260,7 +265,13 @@ EvalStatus SimpleMulticastNetwork::Evaluate(const problem::Workload* workload,
     stats_.multicast_factor[pv] = 0;
 
     /* Quantization addition */
-    if (workload->IsBitwidthSpecified(pvi) && specs_.word_bits.Get() != workload->GetBitwidth(pvi) && (workload->GetBitwidth(pvi) > 0))
+    quantize = false;
+    if (workload->IsBitwidthSpecified(pvi) && (specs_.word_bits.Get() > 1))
+    {
+      assert(workload->GetBitwidth(pvi) <= (specs_.word_bits.Get()) && (workload->GetBitwidth(pvi) > 0));
+      quantize = true;
+    }
+    if (quantize && workload->IsBitwidthSpecified(pvi) && (specs_.word_bits.Get() != workload->GetBitwidth(pvi)) && (workload->GetBitwidth(pvi) > 0))
     {
       for (auto& x: stats_.ingresses.at(pv).stats)
       {
@@ -323,6 +334,7 @@ void SimpleMulticastNetwork::Print(std::ostream& out) const
   for (unsigned pvi = 0; pvi < unsigned(problem::GetShape()->NumDataSpaces); pvi++)
   {
     auto pv = problem::Shape::DataSpaceID(pvi);
+    if(gHideInconsequentialStatsNetworkMulticast && stats_.ingresses.at(pv).TotalAccesses() == 0) continue;
     out << indent << problem::GetShape()->DataSpaceIDToName.at(pv) << ":" << std::endl;
     out << indent + indent << "Fanout                                  : "
     << stats_.fanout.at(pv) << std::endl;

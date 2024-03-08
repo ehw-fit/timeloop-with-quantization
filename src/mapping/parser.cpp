@@ -71,6 +71,8 @@ Mapping ParseAndConstruct(config::CompoundConfigNode config,
   std::unordered_map<unsigned, problem::PerDataSpace<bool>> no_link_transfer;
   std::unordered_map<unsigned, problem::PerDataSpace<bool>> no_multicast;
   std::unordered_map<unsigned, problem::PerDataSpace<bool>> no_temporal_reuse;
+  std::unordered_map<unsigned, problem::PerDataSpace<bool>> rmw_first_update;
+  std::unordered_map<unsigned, problem::PerDataSpace<bool>> no_coalesce;
 
   // Initialize user bypass strings to "XXXXX...1" (note the 1 at the end).
   // FIXME: there's probably a cleaner way/place to initialize this.
@@ -139,7 +141,7 @@ Mapping ParseAndConstruct(config::CompoundConfigNode config,
       //   }
       //   user_permutations[level_id] = level_permutations;
       // }
-
+        std::vector<std::string> datatype_strings;
       if (type == "spatial")
       {
         // Initialize user spatial splits to map all dimensions to the hardware X-axis.
@@ -151,7 +153,7 @@ Mapping ParseAndConstruct(config::CompoundConfigNode config,
         if (directive.exists("no_link_transfer"))
         {
           auto storage_level = arch_props_.TilingToStorage(level_id);
-          std::vector<std::string> datatype_strings;
+          datatype_strings.clear();
           if (directive.lookupArrayValue("no_link_transfer", datatype_strings))
           {
             no_link_transfer[storage_level] = problem::PerDataSpace<bool>();
@@ -174,56 +176,86 @@ Mapping ParseAndConstruct(config::CompoundConfigNode config,
             }
           }
         }
+  
+        bool found = false;
+        datatype_strings.clear();
+        if (directive.exists("no_reuse"))
+          found = directive.lookupArrayValue("no_reuse", datatype_strings);
+        if (!found && directive.exists("no_reuse"))
+          found = directive.lookupArrayValue("no_reuse", datatype_strings);
 
         // No multicast no reduction
-        if (directive.exists("no_multicast_no_reduction"))
+        if (found)
         {
           auto storage_level = arch_props_.TilingToStorage(level_id);
-          std::vector<std::string> datatype_strings;
-          if (directive.lookupArrayValue("no_multicast_no_reduction", datatype_strings))
+          no_multicast[storage_level] = problem::PerDataSpace<bool>();
+          for(unsigned pv = 0; pv < problem::GetShape()->NumDataSpaces; pv++)
+            no_multicast[storage_level][pv] = 0;
+          for (const std::string& datatype_string: datatype_strings)
           {
-            no_multicast[storage_level] = problem::PerDataSpace<bool>();
-            for(unsigned pv = 0; pv < problem::GetShape()->NumDataSpaces; pv++)
-              no_multicast[storage_level][pv] = 0;
-            for (const std::string& datatype_string: datatype_strings)
+            try
             {
-              try
-              {
-                no_multicast[storage_level].at(
-                  problem::GetShape()->DataSpaceNameToID.at(datatype_string)) = 1;
-              }
-              catch (std::out_of_range& oor)
-              {
-                std::cerr << "ERROR: parsing no_multicast_no_reduction setting: data-space " << datatype_string
-                          << " not found in problem shape." << std::endl;
-                exit(1);
-              }
+              no_multicast[storage_level].at(
+                problem::GetShape()->DataSpaceNameToID.at(datatype_string)) = 1;
+            }
+            catch (std::out_of_range& oor)
+            {
+              std::cerr << "ERROR: parsing no_reuse setting: data-space " << datatype_string
+                        << " not found in problem shape." << std::endl;
+              exit(1);
             }
           }
         }
       }
+
       if (type == "temporal")
       {
-        // No temporal reuse
-        if (directive.exists("no_temporal_reuse"))
+        bool found = false;
+        datatype_strings.clear();
+        if (directive.exists("no_reuse"))
+          found = directive.lookupArrayValue("no_reuse", datatype_strings);
+        if (!found && directive.exists("no_temporal_reuse"))
+          found = directive.lookupArrayValue("no_temporal_reuse", datatype_strings);
+        if (found)
         {
           auto storage_level = arch_props_.TilingToStorage(level_id);
-          std::vector<std::string> datatype_strings;
-          if (directive.lookupArrayValue("no_temporal_reuse", datatype_strings))
+          no_temporal_reuse[storage_level] = problem::PerDataSpace<bool>();
+          for(unsigned pv = 0; pv < problem::GetShape()->NumDataSpaces; pv++)
+            no_temporal_reuse[storage_level][pv] = 0;
+          for (const std::string& datatype_string: datatype_strings)
           {
-            no_temporal_reuse[storage_level] = problem::PerDataSpace<bool>();
+            try
+            {
+              no_temporal_reuse[storage_level].at(
+                problem::GetShape()->DataSpaceNameToID.at(datatype_string)) = 1;
+            }
+            catch (std::out_of_range& oor)
+            {
+              std::cerr << "ERROR: parsing no_temporal_reuse setting: data-space " << datatype_string
+                        << " not found in problem shape." << std::endl;
+              exit(1);
+            }
+          }
+        }
+        if (directive.exists("rmw_first_update"))
+        {
+          auto storage_level = arch_props_.TilingToStorage(level_id);
+          datatype_strings.clear();
+          if (directive.lookupArrayValue("rmw_first_update", datatype_strings))
+          {
+            rmw_first_update[storage_level] = problem::PerDataSpace<bool>();
             for(unsigned pv = 0; pv < problem::GetShape()->NumDataSpaces; pv++)
-              no_temporal_reuse[storage_level][pv] = 0;
+              rmw_first_update[storage_level][pv] = 0;
             for (const std::string& datatype_string: datatype_strings)
             {
               try
               {
-                no_temporal_reuse[storage_level].at(
+                rmw_first_update[storage_level].at(
                   problem::GetShape()->DataSpaceNameToID.at(datatype_string)) = 1;
               }
               catch (std::out_of_range& oor)
               {
-                std::cerr << "ERROR: parsing no_temporal_reuse setting: data-space " << datatype_string
+                std::cerr << "ERROR: parsing rmw_first_update setting: data-space " << datatype_string
                           << " not found in problem shape." << std::endl;
                 exit(1);
               }
@@ -232,12 +264,37 @@ Mapping ParseAndConstruct(config::CompoundConfigNode config,
         }
       }
     }
-    else if (type == "datatype" || type == "bypass")
+    else if (type == "datatype" || type == "bypass" || type == "dataspace")
     {
       auto level_id = FindTargetTilingLevel(directive, type);
       ParseUserDatatypeBypassSettings(directive,
                                       arch_props_.TilingToStorage(level_id),
                                       user_bypass_strings);
+      if (directive.exists("no_coalesce"))
+      {
+        auto storage_level = arch_props_.TilingToStorage(level_id);
+        std::vector<std::string> datatype_strings;
+        if (directive.lookupArrayValue("no_coalesce", datatype_strings))
+        {
+          no_coalesce[storage_level] = problem::PerDataSpace<bool>();
+          for(unsigned pv = 0; pv < problem::GetShape()->NumDataSpaces; pv++)
+            no_coalesce[storage_level][pv] = 0;
+          for (const std::string& datatype_string: datatype_strings)
+          {
+            try
+            {
+              no_coalesce[storage_level].at(
+                problem::GetShape()->DataSpaceNameToID.at(datatype_string)) = 1;
+            }
+            catch (std::out_of_range& oor)
+            {
+              std::cerr << "ERROR: parsing no_coalesce setting: data-space " << datatype_string
+                        << " not found in problem shape." << std::endl;
+              exit(1);
+            }
+          }
+        }
+      }
     }
     else if (type == "skew")
     {
@@ -374,7 +431,6 @@ Mapping ParseAndConstruct(config::CompoundConfigNode config,
   // Concatenate the subnests to form the final mapping nest.
   Mapping mapping;
   
-  std::uint64_t storage_level = 0;
   for (uint64_t i = 0; i < arch_props_.TilingLevels(); i++)
   {
     uint64_t num_subnests_added = 0;
@@ -400,7 +456,6 @@ Mapping ParseAndConstruct(config::CompoundConfigNode config,
       }
       mapping.loop_nest.AddStorageTilingBoundary();
       mapping.complete_loop_nest.AddStorageTilingBoundary();
-      storage_level++;
     }
   }
 
@@ -446,6 +501,8 @@ Mapping ParseAndConstruct(config::CompoundConfigNode config,
   mapping.loop_nest.no_link_transfer = no_link_transfer;
   mapping.loop_nest.no_multicast = no_multicast;
   mapping.loop_nest.no_temporal_reuse = no_temporal_reuse;
+  mapping.loop_nest.rmw_first_update = rmw_first_update;
+  mapping.loop_nest.no_coalesce = no_coalesce;
   mapping.id = 0;
   mapping.fanoutX_map = arch_props_.FanoutX();
   mapping.fanoutY_map = arch_props_.FanoutY();
